@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/goccy/go-yaml"
 )
@@ -79,3 +80,15 @@ func ReadConfig(path string) (config Config, err error) {
 
 	return
 }
+
+// ResolvePath interprets relative user paths against the project root and leaves
+// absolute paths intact. The config file location does not change this base.
+func ResolvePath(root, path string) string {
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path)
+	}
+	return filepath.Join(root, path)
+}
+
+// LocalFile reports whether a path names a file inside a temporary workspace.
+func LocalFile(path string) bool { return filepath.IsLocal(path) && filepath.Clean(path) != "." }

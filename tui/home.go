@@ -15,6 +15,13 @@ import (
 // It conditionally delegates rendering to the help screen, the idle waiting screen,
 // or the main problem interface based on the current mode and URL state.
 func (m Model) View() tea.View {
+	if m.width < 20 || m.height < 8 {
+		view := tea.NewView(lipgloss.NewStyle().MaxWidth(max(1, m.width)).MaxHeight(max(1, m.height)).Render("Terminal too small"))
+		view.AltScreen = true
+		view.MouseMode = tea.MouseModeCellMotion
+		return view
+	}
+
 	// compose all the layers
 	compositer := lipgloss.NewCompositor(m.renderHeader(), m.renderMiddle(), m.renderBody())
 	// render the view inside a bordered box
@@ -32,7 +39,15 @@ func (m Model) View() tea.View {
 // renderHeader renders the top header layer containing the current problem's title,
 // styled and constrained to the terminal width.
 func (m Model) renderHeader() *lipgloss.Layer {
-	content := headerStyle.Width(m.width).Render(m.Title)
+	title := m.Title
+	if m.errorText != "" {
+		title = m.errorText
+	}
+	title = strings.SplitN(title, "\n", 2)[0]
+	if len(title) > 1024 {
+		title = strings.ToValidUTF8(title[:1024], "�")
+	}
+	content := headerStyle.Width(max(1, m.width)).MaxHeight(1).Render(title)
 	changedLayer := lipgloss.NewLayer("˙").X(m.width - 2)
 	if m.fileChanged {
 		return lipgloss.NewLayer(content, changedLayer)
@@ -57,7 +72,7 @@ func (m Model) renderMiddle() *lipgloss.Layer {
 		status = style.Foreground(Theme.Error).Render(status)
 	}
 	var content string
-	if m.Status == core.Accepted || m.Status == core.WrongAnswer {
+	if len(m.Tests) > 0 && (m.Status == core.Accepted || m.Status == core.WrongAnswer) {
 		if runtime.GOOS == "windows" {
 			content = fmt.Sprintf("Status: %s %.2fs", status, m.Tests[m.index].Time)
 		} else {
@@ -100,15 +115,15 @@ func (m Model) renderBody() *lipgloss.Layer {
 	var rightX, rightY int
 
 	if m.orientation == Vertical {
-		h = (m.height - 5) / 2
-		w = m.width
+		h = max(2, (m.height-5)/2)
+		w = max(1, m.width)
 		leftX = 0
 		leftY = 0
 		rightX = 0
 		rightY = (m.height-5)/2 + 1
 	} else {
-		h = m.height - 5
-		w = m.width / 2
+		h = max(2, m.height-5)
+		w = max(1, m.width/2)
 		leftX = 0
 		leftY = 0
 		rightX = (m.width + 1) / 2
@@ -129,7 +144,7 @@ func (m Model) renderBody() *lipgloss.Layer {
 	leftLayer := lipgloss.NewLayer(
 		style.Render(
 			fmt.Sprintf("%s\n%s",
-				lipgloss.PlaceHorizontal(w-1, lipgloss.Center, labelStyle.Render(labels[0])),
+				lipgloss.PlaceHorizontal(max(1, w-1), lipgloss.Center, labelStyle.Render(labels[0])),
 				m.leftViewPort.View(),
 			),
 		),
@@ -139,7 +154,7 @@ func (m Model) renderBody() *lipgloss.Layer {
 	rightLayer := lipgloss.NewLayer(
 		style.Render(
 			fmt.Sprintf("%s\n%s",
-				lipgloss.PlaceHorizontal(w-1, lipgloss.Center, labelStyle.Render(labels[1])),
+				lipgloss.PlaceHorizontal(max(1, w-1), lipgloss.Center, labelStyle.Render(labels[1])),
 				m.rightViewPort.View(),
 			),
 		),
@@ -152,10 +167,24 @@ func (m Model) renderBody() *lipgloss.Layer {
 // It applies alternating background/foreground styles to adjacent lines to create
 // a "zebra-stripe" effect for improved readability, and wraps the text to the specified width.
 func wrapContent(content string, width int) string {
+	const maxDisplayBytes = 64 << 10
+	const maxDisplayLines = 2000
+	truncated := len(content) > maxDisplayBytes
+	if truncated {
+		content = strings.ToValidUTF8(content[:maxDisplayBytes], "�")
+	}
+
 	oddStyle := lipgloss.NewStyle()
 	evenStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E6F0FF"))
 
-	lines := strings.Split(content, "\n")
+	lines := strings.SplitN(content, "\n", maxDisplayLines+1)
+	if len(lines) > maxDisplayLines {
+		lines = lines[:maxDisplayLines]
+		truncated = true
+	}
+	if truncated {
+		lines = append(lines, "… display truncated (64 KiB / 2000 lines)")
+	}
 	for i, line := range lines {
 		if i%2 == 0 {
 			lines[i] = oddStyle.Render(line)

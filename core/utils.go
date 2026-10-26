@@ -2,78 +2,49 @@ package core
 
 import (
 	"fmt"
-	"os"
-	"slices"
 	"strings"
-
-	"charm.land/log/v2"
 )
 
-// extractBlock parses a source code string to extract a specific block of text
-// enclosed between `@tag begin` and `@tag end` markers.
-//
-// Returns the extracted block, or the default value if the tag is missing or malformed.
-func extractBlock(source, tag string, defaultValue string) string {
-	if !strings.Contains(source, "@"+tag) {
-		return defaultValue
-	}
-	lines := strings.Split(source, "\n")
-	var start int
-	if start = slices.IndexFunc(lines,
-		func(line string) bool {
-			return strings.Contains(line, "@"+tag) &&
-				strings.Contains(line, "begin")
-		}); start == -1 {
-		return source
-	}
-	end := slices.IndexFunc(lines[start+1:],
-		func(line string) bool {
-			return strings.Contains(line, "@"+tag) &&
-				strings.Contains(line, "end")
-		})
-	var block []string
-	if end == -1 {
-		block = lines[start+1:]
-	} else {
-		block = lines[start+1 : start+1+end]
-	}
-	if len(block) == 0 {
-		return source
-	}
-	return strings.TrimSpace(strings.Join(block, "\n"))
-}
+// extractBlock accepts marker-free text, but rejects incomplete, nested,
+// reversed, or repeated marker pairs. Empty marked blocks are intentionally empty.
+func extractBlock(source, tag, fallback string) (string, error) {
+	var content []string
+	active, done := false, false
+	for _, line := range strings.Split(source, "\n") {
+		marker := ""
+		if index := strings.Index(line, "@"+tag); index >= 0 {
+			tail := line[index+len(tag)+1:]
+			if tail == "" || tail[0] == ' ' || tail[0] == '\t' || tail[0] == '\r' {
+				fields := strings.Fields(tail)
+				if len(fields) == 0 || (fields[0] != "begin" && fields[0] != "end") {
+					return "", fmt.Errorf("@%s: expected begin or end marker", tag)
+				}
+				marker = fields[0]
+			}
+		}
 
-// extractHeaderBlock is a convenience wrapper around extractBlock specifically
-// targeting the `@head` tag to extract include/import headers from library files.
-func extractHeaderBlock(source string) string {
-	return extractBlock(source, "head", "")
-}
-
-// extractCodeBlock is a convenience wrapper around extractBlock specifically
-// targeting the `@code` tag to extract the main logic body of a library or solution file.
-func extractCodeBlock(source string) string {
-	return extractBlock(source, "code", source)
-}
-
-// Unwrap is a fatal error handling utility. If the provided error is non-nil,
-// it logs the error message and immediately terminates the program with exit code 1.
-func Unwrap(message string, err error) {
-	if err != nil {
-		_, _ = fmt.Fprint(os.Stderr,
-			"\x1b[0m"+ // Reset SGR (colors/styles)
-				"\x1b[?25h"+ // Show cursor
-				"\x1b[?1049l"+ // Leave alternate screen
-				"\x1b[?1000l"+ // Disable X10 mouse
-				"\x1b[?1002l"+ // Disable button-event mouse
-				"\x1b[?1003l"+ // Disable all-motion mouse
-				"\x1b[?1005l"+ // Disable UTF-8 mouse
-				"\x1b[?1006l"+ // Disable SGR mouse
-				"\x1b[?1015l"+ // Disable urxvt mouse
-				"\x1b[?2004l"+ // Disable bracketed paste
-				"\x1b[?1l"+ // Normal cursor keys
-				"\x1b>"+ // Normal keypad mode
-				"Please see $TMPDIR/eitri.log\r\n",
-		)
-		log.Fatal(message, "err", err)
+		switch marker {
+		case "begin":
+			if active || done {
+				return "", fmt.Errorf("@%s: repeated begin marker", tag)
+			}
+			active = true
+		case "end":
+			if !active {
+				return "", fmt.Errorf("@%s: end without begin", tag)
+			}
+			active, done = false, true
+		default:
+			if active {
+				content = append(content, line)
+			}
+		}
 	}
+	if active {
+		return "", fmt.Errorf("@%s: missing end marker", tag)
+	}
+	if !done {
+		return fallback, nil
+	}
+	return strings.TrimSpace(strings.Join(content, "\n")), nil
 }

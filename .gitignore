@@ -1,2 +1,5 @@
 .idea/
-eitri
+.DS_Store
+/eitri
+/eitri.exe
+*.test

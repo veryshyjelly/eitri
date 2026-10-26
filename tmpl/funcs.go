@@ -23,6 +23,9 @@ var FuncMap = template.FuncMap{
 
 // removeLines removes the first n lines from a given string.
 func removeLines(n int, s string) string {
+	if n <= 0 {
+		return s
+	}
 	lines := strings.Split(s, "\n")
 	if n >= len(lines) {
 		return ""

@@ -1,166 +1,139 @@
 package core
 
 import (
-	"bytes"
+	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
-	"text/template"
 	"time"
 
-	"charm.land/log/v2"
-	"github.com/samber/lo"
-	"github.com/veryshyjelly/eitri/tmpl"
+	"github.com/veryshyjelly/eitri/config"
 )
 
-type Library struct {
-	Name    string
-	Content string
-}
+// Library is a named snippet exposed to code.modifier templates.
+type Library struct{ Name, Content string }
 
-type node struct {
-	name    string
-	content string
-	deps    []string
-}
-
-// GetSolution orchestrates the final code generation process for submission.
-// It reads the main source file, resolves and topologically sorts library dependencies,
-// extracts and deduplicates header blocks (e.g., #includes), and merges everything
-// into a single, deployable source code string using a configured template modifier.
-func (app App) GetSolution() string {
-	log.Debug("Generating final solution string")
-	code, err := os.ReadFile(filepath.Join(app.Root, app.GetFileName()))
-	Unwrap("couldn't read file in getSolution", err)
-
-	// get the lib files in topo sorted order
-	libFiles := app.linkFiles()
-	log.Debug("Extracting code blocks from libraries", "count", len(libFiles))
-	libCode := lo.Map(libFiles, // extract out the code blocks
-		func(item Library, _ int) Library {
-			return Library{
-				Name:    item.Name,
-				Content: extractCodeBlock(item.Content),
-			}
-		})
-
-	// extract out headers from each lib file
-	log.Debug("Extracting header blocks from libraries")
-	libHeader := lo.Map(libFiles, func(item Library, _ int) []string {
-		return lo.Map(strings.Split(extractHeaderBlock(item.Content), "\n"),
-			func(s string, _ int) string { return strings.TrimSpace(s) })
-	})
-	codeHeader := lo.Map(strings.Split(extractHeaderBlock(string(code)), "\n"),
-		func(s string, _ int) string { return strings.TrimSpace(s) })
-
-	allheaders := append(libHeader, codeHeader)
-
-	// merge and dedup the headers
-	headers := strings.Join(lo.Uniq(slices.Concat(allheaders...)), "\n")
-	log.Debug("Merged and deduplicated headers", "length", len(headers))
-
-	var solution bytes.Buffer
-	log.Debug("Executing solution template modifier")
-	err = template.Must(template.New("template").
-		Funcs(tmpl.FuncMap).Parse(app.Code.Modifier)).
-		Execute(&solution, map[string]any{
-			"Author":   app.Author,
-			"Url":      app.Url,
-			"Time":     time.Now().Format("2006/01/02 15:04"),
-			"LibFiles": libCode,
-			"Header":   headers,
-			"Code":     extractCodeBlock(string(code)),
-		})
-	Unwrap("couldn't execute template on solution", err)
-
-	log.Info("Successfully generated solution string", "size_bytes", solution.Len())
-	return solution.String()
-}
-
-// linkFiles performs a depth-first topological sort on the project's library files
-// to resolve inclusion dependencies. It builds a dependency graph by matching
-// configured regex patterns against file contents.
-//
-// Detects cyclic dependencies and fatally exits if one is found. Returns an ordered
-// slice of libraries ensuring that dependencies are always declared before their dependents.
-func (app App) linkFiles() []Library {
-	log.Debug("Starting library dependency linking")
-	rootFile, err := os.ReadFile(filepath.Join(app.Root, app.GetFileName()))
-	Unwrap("couldn't read file in linkFiles", err)
-
-	nodes := lo.MapEntries(app.getLibFiles(),
-		func(name, content string) (string, *node) {
-			return name, &node{
-				name:    name,
-				content: content,
-			}
-		})
-
-	regTemplate := template.Must(template.New("libReg").Funcs(tmpl.FuncMap).Parse(app.Lib.Regex))
-	var thisRegex bytes.Buffer
-
-	log.Debug("Building dependency graph")
-	for _, n := range nodes {
-		for dep := range nodes {
-			thisRegex.Reset()
-			err = regTemplate.Execute(&thisRegex, map[string]any{"Name": dep})
-			Unwrap("couldn't generate libcheck regex from template", err)
-			if re := regexp.MustCompile(thisRegex.String()); re.MatchString(n.content) {
-				n.deps = append(n.deps, dep)
-				log.Debug("Found dependency", "node", n.name, "depends_on", dep)
-			}
-		}
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
 	}
+	slices.Sort(keys)
+	return keys
+}
 
-	var roots []string
-	for name := range nodes {
-		thisRegex.Reset()
-		err = regTemplate.Execute(&thisRegex, map[string]any{"Name": name})
-		log.Debug("Regex for ", "node", name, "regex", thisRegex.String())
-		Unwrap("couldn't generate libcheck regex from template", err)
-		if re := regexp.MustCompile(thisRegex.String()); re.Match(rootFile) {
-			roots = append(roots, name)
-			log.Debug("Identified root dependency", "name", name)
+// linkFiles compiles each detection expression once, then visits only reachable
+// snippets. Sorted roots and edges give reproducible dependency-first order.
+func linkFiles(source string, files map[string]string, pattern string) ([]Library, error) {
+	names := sortedKeys(files)
+	expressions := make(map[string]*regexp.Regexp, len(names))
+	for _, name := range names {
+		text, err := render("lib.regex", pattern, map[string]any{"Name": name})
+		if err != nil {
+			return nil, err
 		}
+		re, err := regexp.Compile(text)
+		if err != nil {
+			return nil, fmt.Errorf("lib.regex for %q: %w", name, err)
+		}
+		expressions[name] = re
 	}
-	log.Info("Found library roots", "roots", roots)
-
-	const (
-		white = iota
-		gray
-		black
-	)
-	state := map[string]int{}
+	state := make(map[string]uint8, len(names))
 	var order []Library
-
-	// topological sort
-	var dfs func(string)
-	dfs = func(name string) {
-		switch state[name] {
-		case gray:
-			log.Error("Cyclic library dependency detected", "node", name)
-			os.Exit(1)
-		case black:
-			return
+	var stack []string
+	var visit func(string) error
+	visit = func(name string) error {
+		if state[name] == 2 {
+			return nil
 		}
-		state[name] = gray
-		log.Debug("DFS traversing", "node", name)
-		for _, dep := range nodes[name].deps {
-			dfs(dep)
+		if state[name] == 1 {
+			start := slices.Index(stack, name)
+			chain := append(slices.Clone(stack[start:]), name)
+			return fmt.Errorf("cyclic library dependency: %s", strings.Join(chain, " -> "))
 		}
-		state[name] = black
-		order = append(order, Library{
-			Name:    name,
-			Content: nodes[name].content,
-		})
+		state[name] = 1
+		stack = append(stack, name)
+		for _, dep := range names {
+			if expressions[dep].MatchString(files[name]) {
+				if err := visit(dep); err != nil {
+					return err
+				}
+			}
+		}
+		stack = stack[:len(stack)-1]
+		state[name] = 2
+		order = append(order, Library{Name: name, Content: files[name]})
+		return nil
 	}
-
-	for _, root := range roots {
-		dfs(root)
+	for _, name := range names {
+		if expressions[name].MatchString(source) {
+			if err := visit(name); err != nil {
+				return nil, err
+			}
+		}
 	}
+	return order, nil
+}
 
-	log.Info("Successfully linked libraries", "order", lo.Map(order, func(l Library, _ int) string { return l.Name }))
-	return order
+// Solution reads the source once and renders the linked submission. Time remains
+// available to custom templates; templates using it intentionally vary over time.
+func (app App) Solution() (string, error) {
+	name, err := app.FileName()
+	if err != nil {
+		return "", err
+	}
+	source, err := os.ReadFile(config.ResolvePath(app.Root, name))
+	if err != nil {
+		return "", fmt.Errorf("read source: %w", err)
+	}
+	files, err := app.libraries()
+	if err != nil {
+		return "", err
+	}
+	libraries, err := linkFiles(string(source), files, app.Lib.Regex)
+	if err != nil {
+		return "", err
+	}
+	var headers []string
+	seen := make(map[string]bool)
+	addHeaders := func(text string) error {
+		header, err := extractBlock(text, "head", "")
+		if err != nil {
+			return err
+		}
+		for _, line := range strings.Split(header, "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" && !seen[line] {
+				seen[line] = true
+				headers = append(headers, line)
+			}
+		}
+		return nil
+	}
+	for i := range libraries {
+		if err := addHeaders(libraries[i].Content); err != nil {
+			return "", fmt.Errorf("library %s: %w", libraries[i].Name, err)
+		}
+		content, err := extractBlock(libraries[i].Content, "code", libraries[i].Content)
+		if err != nil {
+			return "", fmt.Errorf("library %s: %w", libraries[i].Name, err)
+		}
+		libraries[i].Content = content
+	}
+	if err := addHeaders(string(source)); err != nil {
+		return "", fmt.Errorf("source: %w", err)
+	}
+	code, err := extractBlock(string(source), "code", string(source))
+	if err != nil {
+		return "", fmt.Errorf("source: %w", err)
+	}
+	modifier := app.Code.Modifier
+	if modifier == "" {
+		modifier = "{{ .Code }}"
+	}
+	return render("code.modifier", modifier, map[string]any{
+		"Author": app.Author, "Url": app.Url, "Time": time.Now().Format("2006/01/02 15:04"),
+		"LibFiles": libraries, "Header": strings.Join(headers, "\n"), "Code": code,
+	})
 }

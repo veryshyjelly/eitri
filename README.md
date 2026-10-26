@@ -21,7 +21,7 @@ Eitri works with the [Competitive Companion](https://github.com/jmerle/competiti
 - **Boilerplate generation**: creates your starter file from a template, with author, timestamp, and problem URL filled in.
 - **Snippet linker**: reads `@head` and `@code` tags in your personal library, sorts dependencies topologically, and merges everything into the final submission. Cyclic dependencies are detected and rejected.
 - **Watch and run**: a filesystem watcher compiles and runs your code against the samples every time you save.
-- **Sandboxed execution**: code compiles and runs in an isolated temporary directory with strict time limits and peak memory tracking.
+- **Managed execution**: builds and samples run in separate temporary workspaces, with cancellation, time limits, bounded output, and peak memory tracking.
 - **Transpiled-language support**: if your language compiles to another one (ClojureScript to JavaScript, for example), Eitri can copy and submit the compiled output instead of your source file.
 - **Split-pane TUI**: a Bubble Tea interface for comparing input, expected output, actual output, and stderr side by side, with mouse support.
 - **Switchable layout**: flip the panes between side-by-side and stacked on the fly to fit your terminal and workflow.
@@ -50,7 +50,7 @@ Eitri works with the [Competitive Companion](https://github.com/jmerle/competiti
 
 ## Installation
 
-You need [Go](https://go.dev/dl/) 1.22 or newer.
+You need [Go](https://go.dev/dl/) 1.25.11 or newer.
 
 ```
 go install github.com/veryshyjelly/eitri@latest
@@ -80,6 +80,7 @@ eitri [options]
 | `-c`, `--config <file>` | Path to the configuration file. | `./eitri.yml`     |
 | `-C`, `--root <dir>`    | Project root directory.         | `.` (current dir) |
 | `-d`, `--debug`         | Enable verbose debug logging.   | `false`           |
+| `-l`, `--vertical`      | Start with stacked panes.       | `false`           |
 | `-v`, `--version`       | Show version information.       | `false`           |
 | `-h`, `--help`          | Show help message.              | `false`           |
 
@@ -135,7 +136,7 @@ lib:
 # Compiler and execution settings
 compiler:
   name: Ocaml
-  source: "main.ml"       # Name of the sandbox file
+  source: "main.ml"       # Name of the temporary source file
   compile: ocamlfind      # Leave empty for interpreted languages (Python, etc.)
   args:
     - ocamlopt
@@ -173,7 +174,11 @@ compiler:
 compiled_file: main.js
 ```
 
-Tests still run through `run`, so you test exactly what you will submit.
+Tests still run through `run`, so configure it to execute the artifact you intend to submit. A missing artifact or failed build reports an error; Eitri never silently substitutes the source file. An intentionally empty artifact is supported. `compiler.source` and `compiled_file` must be relative file paths within the temporary workspace.
+
+`compiler.compile` names an executable, and `compiler.args` supplies its arguments; arguments may be omitted. `compiler.run` and `editor` use shell-style argument quoting, without implicit shell expansion. For a multi-step pipeline, explicitly invoke a script or a shell through `compile` and `args`. Quote `{{ .Filename }}` in the editor template if workspace paths can contain spaces.
+
+All other relative paths resolve against `--root`, independently of the config file location. Absolute template and library paths are supported. Empty `template.modifier` and `code.modifier` values pass their source through unchanged. `template.source` may be omitted when automatic file creation is disabled.
 
 ### Config validation
 
@@ -187,9 +192,9 @@ Eitri validates `eitri.yml` strictly when it starts. If a field is missing or in
 | ---------------------- | ----------------------------- |
 | `r` / `Ctrl+'`         | **Run** test cases manually   |
 | `f`                    | **Create** boilerplate file   |
-| `c`                    | **Copy** solution file        |
+| `c` / `Ctrl+C`         | **Copy** solution file        |
 | `a`                    | **Add** custom test case      |
-| `q` / `Esc` / `Ctrl+C` | **Quit** application          |
+| `q` / `Esc` / `Ctrl+D` | **Quit** application          |
 |                        |                               |
 | `1` / `j`              | View: **Input** & **Answer**  |
 | `2` / `k`              | View: **Input** & **Output**  |
@@ -216,6 +221,21 @@ Eitri's linker treats your personal snippet library like a tiny compiler front e
 3. It runs a **topological sort** (DFS) so dependencies come before the files that need them, and it rejects cycles.
 4. It extracts headers (`@head begin` ... `@head end`) and code blocks (`@code begin` ... `@code end`) and merges them into the final solution without touching your local library files.
 
+Roots and dependencies use alphabetical ordering, so independent snippets have stable output order. Shared dependencies appear once. Cycles report their dependency chain. Header lines are trimmed and deduplicated in dependency order. Marker-free files retain their original text; empty marked blocks are empty, and incomplete, nested, or repeated blocks report errors. Directory includes load immediate files across extensions using basenames without extensions; conflicting names are errors.
+
+
+---
+
+## Execution and lifecycle
+
+Rapid saves are debounced for 200 ms. Eitri watches parent directories, supports atomic replacement saves, and follows directories created after problem intake. A new run cancels its predecessor; background operations are serialized, and obsolete results cannot replace the current problem or run. Tests keep their original sample order and execute sequentially.
+
+Samples use the problem's time limit, with a two-second fallback when the extension supplies zero. Builds have a two-minute deadline. Captured stdout and stderr are limited to 4 MiB per stream, and generated submission artifacts are limited to 4 MiB. Excessive sample output reports a runtime error. Each TUI pane displays up to 64 KiB or 2,000 lines, with an explicit truncation marker; judging still uses the captured output. Output comparison trims whitespace at the ends of the entire output; internal spaces and line breaks remain significant. No samples means `NA`.
+
+Temporary directories isolate build files; **they are not a security sandbox**. Programs run with your user permissions and can access the filesystem and network. Unix processes use a process group; Windows uses a Job Object so cancellation and cleanup include descendants. Peak memory is an observation rather than an enforced memory limit, and is unavailable on Windows.
+
+The HTTP server listens only on `127.0.0.1:6174`. Problem intake accepts POST requests up to 4 MiB. Pressing copy prepares an artifact for the clipboard and for one subsequent `/submit` poll. Source changes or a new problem invalidate a pending submission. Quitting cancels work, joins background operations, closes the watcher, and shuts down HTTP intake.
+
 ---
 
 ## Logging and debugging
@@ -224,7 +244,7 @@ Eitri logs in the background so the interface stays clean.
 
 - **Location**: `<OS_TEMP_DIR>/eitri.log` (for example `/tmp/eitri.log` on Linux and macOS).
 - **Levels**: `DEBUG` (enable with `-d`), `INFO`, and `ERROR`.
-- **Contents**: incoming HTTP payloads, dependency graph resolution, compiler stderr, and sandbox execution metrics.
+- **Contents**: operational failures and diagnostics. Full Competitive Companion payloads and configuration values are not logged.
 
 ---
 
@@ -234,13 +254,14 @@ These are ideas, not implemented features:
 
 - Stress testing: run your solution against a brute-force one on random inputs to find failing cases.
 - Custom checkers for problems with multiple valid answers.
-- Per-test time and memory display in the TUI.
 - Multiple compiler profiles, switchable per problem or per site.
 - Contest mode: track all problems of a contest in one view.
 
 ---
 
 ## Contributing
+
+Run `go test ./...`, `go vet ./...`, `go test -race ./...`, and `go build ./...` before submitting changes. [Engineering notes](REFACTOR.md) describe subsystem ownership and validation.
 
 Contributions, issues, and feature requests are welcome. See the [issues page](https://github.com/veryshyjelly/eitri/issues).
 

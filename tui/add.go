@@ -3,8 +3,8 @@ package tui
 import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
-	"charm.land/log/v2"
 	"github.com/veryshyjelly/eitri/core"
+	"github.com/veryshyjelly/eitri/watcher"
 )
 
 type AddTestCase struct {
@@ -34,14 +34,28 @@ func (m *AddTestCase) Init() tea.Cmd {
 
 func (m *AddTestCase) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if k, ok := msg.(tea.KeyMsg); ok && k.String() == "esc" {
-		return m.parent, nil
+		return m.parent.updatePanes(), nil
+	}
+
+	// Background messages still belong to the underlying problem model.
+	switch msg.(type) {
+	case core.Info:
+		return m.parent.Update(msg)
+	case runResult, prepared, copyResult, clipboardResult, operationError, watcher.Changed, watcher.Error, tea.WindowSizeMsg:
+		parent, cmd := m.parent.Update(msg)
+		m.parent = parent.(Model)
+		return m, cmd
 	}
 
 	var cmd tea.Cmd
 	m.form, cmd = m.form.Update(msg)
 
 	if m.form.(*huh.Form).State == huh.StateCompleted {
-		log.Debug("Adding test case", "input", m.input, "output", m.output)
+		if m.parent.runCancel != nil {
+			m.parent.runCancel()
+		}
+		m.parent.generation++
+		m.parent.Status = core.NotAvailable
 		m.parent.Tests = append(m.parent.Tests,
 			core.Testcase{
 				Input:  m.input,
@@ -49,7 +63,7 @@ func (m *AddTestCase) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Status: core.NotAvailable,
 			},
 		)
-		return m.parent, nil
+		return m.parent.updatePanes(), nil
 	}
 
 	return m, cmd

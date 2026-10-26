@@ -36,8 +36,8 @@ func (s Splash) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return h, nil
 		}
 	case tea.WindowSizeMsg:
-		s.width = msg.Width - 2
-		s.height = msg.Height - 2
+		s.width = max(1, msg.Width-2)
+		s.height = max(1, msg.Height-2)
 		s.home, cmd = s.home.Update(msg)
 	case core.Info:
 		return s.home.Update(msg)

@@ -33,6 +33,7 @@ template:
   modifier: |
     // Created by {{ .Author }} at {{ .Time }} 
     // {{ .Url }} 
+    // {{ .Title }}
     {{ .Code }}
 
 # Optional code post-processing.

@@ -15,6 +15,9 @@ import (
 // metric was successfully retrieved. (Note: The Windows implementation currently
 // returns 0 and false as a placeholder).
 func PeakMemory(cmd *exec.Cmd) (uint64, bool) {
+	if cmd == nil || cmd.ProcessState == nil {
+		return 0, false
+	}
 	usage, ok := cmd.ProcessState.SysUsage().(*syscall.Rusage)
 	if !ok {
 		return 0, false

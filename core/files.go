@@ -2,234 +2,162 @@ package core
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"text/template"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
-	"charm.land/log/v2"
-	"github.com/atotto/clipboard"
 	"github.com/google/shlex"
 	"github.com/veryshyjelly/eitri/config"
 	"github.com/veryshyjelly/eitri/tmpl"
 )
 
-// CreateFile generates a boilerplate source code file based on the current problem's
-// URL and the configured filename rules and templates.
-//
-// This function is designed to be executed as a Bubble Tea command and always returns nil.
-func (app App) CreateFile() tea.Msg {
-	filename := filepath.Join(app.Root, app.GetFileName())
-	log.Info("Attempting to create file", "filename", filename)
-
-	// if the file already exists then we ought not do anything
-	_, err := os.ReadFile(filename)
-	if err == nil {
-		log.Debug("File already exists, skipping creation", "filename", filename)
-		return nil
-	}
-
-	// now create the file
-	file, err := os.Create(filename)
-	Unwrap("couldn't create file", err)
-	defer file.Close()
-
-	// if template is provided then fill the new file with template
-	if app.Template.Source != "" {
-		templPath := filepath.Join(app.Root, app.Template.Source)
-		log.Debug("Reading template file", "path", templPath)
-		templ, err := os.ReadFile(templPath)
-		Unwrap("couldn't open template", err)
-
-		// render the template modifier and write directly in the file
-		modifier := app.Template.Modifier
-		log.Debug("Rendering template modifier")
-		err = template.Must(template.New("template").
-			Funcs(tmpl.FuncMap).
-			Parse(modifier)).Execute(file, map[string]any{
-			"Author":   app.Author,
-			"Time":     time.Now().Format("2006/01/02 15:04"),
-			"Url":      app.Url,
-			"Title":    app.Title,
-			"Filename": filenameWithoutExt(app.GetFileName()),
-			"Code":     string(templ),
-		})
-		Unwrap("couldn't write template", err)
-	}
-
-	log.Info("Successfully created file", "filename", filename)
-	return nil
-}
-
-func filenameWithoutExt(path string) string {
-	base := filepath.Base(path)
-	return strings.TrimSuffix(base, filepath.Ext(base))
-}
-
-// OpenEditor constructs and executes an external editor command to open the current problem's file.
-// It renders the editor command from a template defined in the model's configuration.
-// The template receives the full path to the file as "Filename".
-// The command is then split into arguments and executed in the `m.Root` directory.
-// Errors during template rendering, command parsing, or execution are logged.
-func (app App) OpenEditor() tea.Cmd {
-	filename := filepath.Join(app.Root, app.GetFileName())
-	var editor bytes.Buffer
-	err := template.Must(template.New("editor").
-		Funcs(tmpl.FuncMap).
-		Parse(app.Config.Editor)).Execute(&editor, map[string]any{
-		"Filename": filename,
-	})
-	Unwrap("couldn't render editor template", err)
-
-	args, err := shlex.Split(editor.String())
-	Unwrap("couldn't parse editor template", err)
-
-	log.Debug("Executing editor command", "args", args)
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Dir = app.Root
-
-	return tea.ExecProcess(cmd, func(err error) tea.Msg {
-		return nil
-	})
-}
-
-// GetCompiledFileContent returns the content of the compiled file if CompiledFile
-// is configured in the config, otherwise it returns an empty string.
-// The function handles compilation and sandbox directory cleanup automatically.
-func (app App) GetCompiledFileContent() string {
-	if app.Config.CompiledFile == "" {
-		return ""
-	}
-
-	sandboxDir, err := app.compile()
+func render(name, text string, data any) (string, error) {
+	t, err := template.New(name).Funcs(tmpl.FuncMap).Option("missingkey=error").Parse(text)
 	if err != nil {
-		log.Error("Compilation failed", "err", err)
-		return ""
+		return "", fmt.Errorf("%s: %w", name, err)
 	}
-	defer os.RemoveAll(sandboxDir)
-
-	compiledFilePath := filepath.Join(sandboxDir, app.Config.CompiledFile)
-	log.Debug("Reading compiled file", "path", compiledFilePath)
-	fileContent, err := os.ReadFile(compiledFilePath)
-	if err != nil {
-		log.Error("Failed to read compiled file", "err", err)
-		return ""
+	var b bytes.Buffer
+	if err := t.Execute(&b, data); err != nil {
+		return "", fmt.Errorf("%s: %w", name, err)
 	}
-
-	return string(fileContent)
+	return b.String(), nil
 }
 
-// CopyFile copies the final solution to clipboard.
-// If app.Config.CompiledFile is set, it first compiles the solution
-// and then copies the file at the CompiledFile path (relative to the
-// compilation sandbox directory). Otherwise, it copies the current
-// solution as before.
-func (app App) CopyFile() tea.Msg {
-	if content := app.GetCompiledFileContent(); content != "" {
-		log.Info("CompiledFile is set, copying specified file")
-		err := clipboard.WriteAll(content)
-		if err != nil {
-			log.Error("Failed to write to clipboard", "err", err)
-			return nil
-		}
-		log.Info("Successfully copied compiled file to clipboard")
-		return nil
-	}
-
-	log.Debug("Copying current solution file")
-	err := clipboard.WriteAll(app.GetSolution())
-	if err != nil {
-		log.Fatal(err)
-	}
-	return nil
-}
-
-// GetFileName determines the local filename for the current problem by matching
-// the problem's URL against configured site-specific regex rules. It captures
-// URL substrings and injects them into a Go template to generate the final name.
-//
-// Note: Calls os.Exit(1) if no matching rule is found for the current URL host.
-func (app App) GetFileName() string {
+// FileName routes a problem URL through the configured rules. Rules for the same
+// host are tried in configuration order until the URL expression matches.
+func (app App) FileName() (string, error) {
 	u, err := url.Parse(app.Url)
-	Unwrap("couldn't parse url", err)
-	host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
-	log.Debug("Parsing filename", "url", app.Url, "host", host)
-
-	// find the rule satisfying this url
-	index := slices.IndexFunc(app.Rules, func(r config.Rule) bool { return r.Site == host })
-	if index == -1 {
-		log.Error("Could not find a rule matching site", "site", host, "url", app.Url)
-		os.Exit(1)
+	if err != nil || u.Hostname() == "" {
+		return "", fmt.Errorf("invalid problem URL %q", app.Url)
 	}
-	log.Debug("Matched rule", "site", app.Rules[index].Site, "regex", app.Rules[index].Regex)
-
-	// parse template for this rule
-	nameTemplate := template.Must(template.New("filename").
-		Funcs(tmpl.FuncMap).
-		Parse(app.Rules[index].Template))
-
-	// capture url parts using provided regex
-	regex, err := regexp.Compile(app.Rules[index].Regex)
-	Unwrap("invalid regex for url parsing", err)
-
-	captures := regex.FindStringSubmatch(app.Url)
-	log.Debug("Regex captures", "captures", captures)
-
-	var buffer bytes.Buffer
-
-	cleanedTitle := strings.NewReplacer("'", "", "\"", "").Replace(app.Title)
-	err = nameTemplate.Execute(&buffer, map[string]any{
-		"Captures": captures,
-		"Title":    cleanedTitle,
-	})
-	Unwrap("template error", err)
-
-	generatedName := buffer.String()
-	log.Debug("Generated filename", "name", generatedName)
-	return generatedName
+	host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+	for _, rule := range app.Rules {
+		if strings.TrimPrefix(strings.ToLower(rule.Site), "www.") != host {
+			continue
+		}
+		re, err := regexp.Compile(rule.Regex)
+		if err != nil {
+			return "", fmt.Errorf("filename regex for %s: %w", host, err)
+		}
+		captures := re.FindStringSubmatch(app.Url)
+		if captures == nil {
+			continue
+		}
+		name, err := render("filename", rule.Template, map[string]any{
+			"Captures": captures, "Title": strings.NewReplacer("'", "", "\"", "").Replace(app.Title),
+		})
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(name) == "" || strings.HasSuffix(name, "/") || strings.HasSuffix(name, "\\") || filepath.Clean(name) == "." {
+			return "", fmt.Errorf("filename template produced an invalid file path %q", name)
+		}
+		return filepath.Clean(name), nil
+	}
+	return "", fmt.Errorf("no filename rule matches %s", app.Url)
 }
 
-// getLibFiles scans configured library paths (both individual files and directories)
-// and returns a map of library filenames to their raw source code contents.
-//
-// The scan is filtered to only include files that match the extension of the
-// current problem's target filename.
-func (app App) getLibFiles() map[string]string {
-	extension := filepath.Ext(app.GetFileName())
-	log.Debug("Fetching library files", "extension", extension)
-
-	libFiles := make(map[string]string)
-	for name, location := range app.Lib.Include {
-		location = filepath.Join(app.Root, location)
-		stat, err := os.Stat(location)
-		Unwrap("couldn't state lib file", err)
-
-		if stat.IsDir() {
-			log.Debug("Scanning library directory", "dir", location)
-			dir, err := os.ReadDir(location)
-			Unwrap("couldn't read lib directory", err)
-			for _, d := range dir {
-				if !d.IsDir() {
-					libFile, err := os.ReadFile(filepath.Join(location, d.Name()))
-					Unwrap("couldn't read lib file", err)
-					libFiles[strings.TrimSuffix(d.Name(), filepath.Ext(d.Name()))] = string(libFile)
-					log.Debug("Loaded library file from directory", "file", d.Name())
-				}
-			}
-		} else {
-			libFile, err := os.ReadFile(location)
-			Unwrap("couldn't read lib file", err)
-			libFiles[name] = string(libFile)
-			log.Debug("Loaded library file", "name", name, "path", location)
+// CreateFile renders the entire boilerplate before exclusively creating the
+// destination. Existing source files are never overwritten.
+func (app App) CreateFile() error {
+	name, err := app.FileName()
+	if err != nil {
+		return err
+	}
+	path := config.ResolvePath(app.Root, name)
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("source: %w", err)
+	}
+	var source []byte
+	if app.Template.Source != "" {
+		source, err = os.ReadFile(config.ResolvePath(app.Root, app.Template.Source))
+		if err != nil {
+			return fmt.Errorf("read boilerplate: %w", err)
 		}
 	}
+	modifier := app.Template.Modifier
+	if modifier == "" {
+		modifier = "{{ .Code }}"
+	}
+	content, err := render("template.modifier", modifier, map[string]any{
+		"Author": app.Author, "Time": time.Now().Format("2006/01/02 15:04"),
+		"Url": app.Url, "Title": app.Title,
+		"Filename": strings.TrimSuffix(filepath.Base(name), filepath.Ext(name)), "Code": string(source),
+	})
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return fmt.Errorf("create source directory: %w", err)
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if os.IsExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("create source: %w", err)
+	}
+	_, writeErr := f.WriteString(content)
+	closeErr := f.Close()
+	if writeErr != nil {
+		_ = os.Remove(path)
+		return fmt.Errorf("write source: %w", writeErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close source: %w", closeErr)
+	}
+	return nil
+}
 
-	log.Info("Finished fetching library files", "count", len(libFiles))
-	return libFiles
+// EditorCommand prepares a direct argv invocation; shell operators are never
+// evaluated implicitly. Quote {{ .Filename }} in editor when paths contain spaces.
+func (app App) EditorCommand(ctx context.Context) (*exec.Cmd, error) {
+	name, err := app.FileName()
+	if err != nil {
+		return nil, err
+	}
+	path, err := filepath.Abs(config.ResolvePath(app.Root, name))
+	if err != nil {
+		return nil, err
+	}
+	command, err := render("editor", app.Editor, map[string]any{"Filename": path})
+	if err != nil {
+		return nil, err
+	}
+	args, err := shlex.Split(command)
+	if err != nil {
+		return nil, fmt.Errorf("editor command: %w", err)
+	}
+	if len(args) == 0 || args[0] == "" {
+		return nil, fmt.Errorf("editor command is empty")
+	}
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	cmd.Dir = app.Root
+	return cmd, nil
+}
+
+// libraries reads configured snippets after centralized path discovery.
+func (app App) libraries() (map[string]string, error) {
+	paths, err := app.Config.LibraryPaths(app.Root)
+	if err != nil {
+		return nil, err
+	}
+	files := make(map[string]string, len(paths))
+	for _, name := range sortedKeys(paths) {
+		content, err := os.ReadFile(paths[name])
+		if err != nil {
+			return nil, fmt.Errorf("library %s: %w", name, err)
+		}
+		files[name] = string(content)
+	}
+	return files, nil
 }

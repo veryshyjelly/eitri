@@ -3,9 +3,11 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -50,6 +52,11 @@ func (e *ValidationError) Error() string {
 // Validate checks that the configuration is complete and usable before startup.
 func Validate(cfg Config, root string, configPath string) error {
 	var issues []Issue
+	if stat, err := os.Stat(root); err != nil {
+		issues = append(issues, Issue{Path: "root", Message: err.Error()})
+	} else if !stat.IsDir() {
+		issues = append(issues, Issue{Path: "root", Message: "must be a directory"})
+	}
 
 	issues = append(issues, validateFilenameRules(cfg, root)...)
 	issues = append(issues, validateTemplateSection(cfg, root)...)
@@ -183,7 +190,7 @@ func validateFilenameTemplate(path string, templateStr string, regex *regexp.Reg
 		})
 	}
 
-	fullPath := filepath.Join(root, rendered)
+	fullPath := ResolvePath(root, rendered)
 	stat, err := os.Stat(fullPath)
 	if err == nil && stat.IsDir() {
 		issues = append(issues, Issue{
@@ -200,6 +207,9 @@ func validateTemplateSection(cfg Config, root string) []Issue {
 	var issues []Issue
 
 	if strings.TrimSpace(cfg.Template.Source) == "" {
+		if !cfg.CreateFile {
+			return validateTemplateString("template.modifier", cfg.Template.Modifier)
+		}
 		issues = append(issues, Issue{
 			Path:    "template.source",
 			Message: "missing required field 'source'",
@@ -208,7 +218,7 @@ func validateTemplateSection(cfg Config, root string) []Issue {
 		return issues
 	}
 
-	sourcePath := filepath.Join(root, cfg.Template.Source)
+	sourcePath := ResolvePath(root, cfg.Template.Source)
 	stat, err := os.Stat(sourcePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -255,19 +265,18 @@ func validateCompilerSection(cfg Config) []Issue {
 			Message: "missing required field 'run'",
 			Hint:    "run: ./main",
 		})
-	} else if _, err := shlex.Split(cfg.Compiler.Run); err != nil {
+	} else if args, err := shlex.Split(cfg.Compiler.Run); err != nil || len(args) == 0 || args[0] == "" {
 		issues = append(issues, Issue{
 			Path:    "compiler.run",
-			Message: fmt.Sprintf("invalid run command: %v", err),
+			Message: fmt.Sprintf("invalid or empty run command: %q (%v)", cfg.Compiler.Run, err),
 		})
 	}
 
-	if strings.TrimSpace(cfg.Compiler.Compile) != "" && len(cfg.Compiler.Args) == 0 {
-		issues = append(issues, Issue{
-			Path:    "compiler.args",
-			Message: "must be non-empty when compiler.compile is set",
-			Hint:    "args:\n  - --edition=2024\n  - -O\n  - main.rs",
-		})
+	if cfg.Compiler.Source != "" && !LocalFile(cfg.Compiler.Source) {
+		issues = append(issues, Issue{Path: "compiler.source", Message: "must name a relative file inside the temporary workspace"})
+	}
+	if cfg.CompiledFile != "" && !LocalFile(cfg.CompiledFile) {
+		issues = append(issues, Issue{Path: "compiled_file", Message: "must name a relative file inside the temporary workspace"})
 	}
 
 	return issues
@@ -275,13 +284,17 @@ func validateCompilerSection(cfg Config) []Issue {
 
 func validateLibSection(cfg Config, root string) []Issue {
 	var issues []Issue
+	if len(cfg.Lib.Include) > 0 && strings.TrimSpace(cfg.Lib.Regex) == "" {
+		issues = append(issues, Issue{Path: "lib.regex", Message: "required when lib.include is set"})
+	}
 
 	if strings.TrimSpace(cfg.Lib.Regex) != "" {
 		issues = append(issues, validateTemplateString("lib.regex", cfg.Lib.Regex)...)
 	}
 
-	for name, location := range cfg.Lib.Include {
-		includePath := filepath.Join(root, location)
+	for _, name := range slices.Sorted(maps.Keys(cfg.Lib.Include)) {
+		location := cfg.Lib.Include[name]
+		includePath := ResolvePath(root, location)
 		stat, err := os.Stat(includePath)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -307,6 +320,31 @@ func validateLibSection(cfg Config, root string) []Issue {
 		}
 	}
 
+	if len(issues) == 0 && len(cfg.Lib.Include) > 0 {
+		paths, err := cfg.LibraryPaths(root)
+		if err != nil {
+			return append(issues, Issue{Path: "lib.include", Message: err.Error()})
+		}
+		expression, err := template.New("lib.regex").Funcs(tmpl.FuncMap).Option("missingkey=error").Parse(cfg.Lib.Regex)
+		if err != nil {
+			return append(issues, Issue{Path: "lib.regex", Message: err.Error()})
+		}
+		names := slices.Sorted(maps.Keys(paths))
+		if len(names) == 0 {
+			names = []string{"example"}
+		}
+		for _, name := range names {
+			var b bytes.Buffer
+			if err := expression.Execute(&b, map[string]any{"Name": name}); err != nil {
+				issues = append(issues, Issue{Path: "lib.regex", Message: err.Error()})
+				continue
+			}
+			if _, err := regexp.Compile(b.String()); err != nil {
+				issues = append(issues, Issue{Path: "lib.regex", Message: fmt.Sprintf("invalid regex for %s: %v", name, err)})
+			}
+		}
+	}
+
 	return issues
 }
 
@@ -314,7 +352,22 @@ func validateOptionalTemplates(cfg Config) []Issue {
 	var issues []Issue
 
 	if strings.TrimSpace(cfg.Editor) != "" {
-		issues = append(issues, validateTemplateString("editor", cfg.Editor)...)
+		t, err := template.New("editor").Funcs(tmpl.FuncMap).Option("missingkey=error").Parse(cfg.Editor)
+		if err == nil {
+			var b bytes.Buffer
+			err = t.Execute(&b, map[string]any{"Filename": "/example/source"})
+			if err == nil {
+				var args []string
+				args, err = shlex.Split(b.String())
+				if err == nil && (len(args) == 0 || args[0] == "") {
+					err = fmt.Errorf("editor command is empty")
+				}
+			}
+		}
+		if err != nil {
+			issues = append(issues, Issue{Path: "editor", Message: err.Error()})
+		}
+
 	}
 
 	if strings.TrimSpace(cfg.Code.Modifier) != "" {

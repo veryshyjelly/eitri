@@ -6,7 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"charm.land/log/v2"
-	"github.com/veryshyjelly/eitri/core"
 )
 
 type Help struct {
@@ -29,12 +28,12 @@ func (h Help) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, DefaultKeyMap.Quit, DefaultKeyMap.Help):
 			return h.parent, nil
 		}
-	case core.Info:
-		h.parent, cmd = h.parent.Update(msg)
 	case tea.WindowSizeMsg:
 		h.parent, cmd = h.parent.Update(msg)
-		h.width = msg.Width - 2
-		h.height = msg.Height - 2
+		h.width = max(1, msg.Width-2)
+		h.height = max(1, msg.Height-2)
+	default:
+		h.parent, cmd = h.parent.Update(msg)
 	}
 	return h, cmd
 }
