@@ -1,0 +1,49 @@
+version: 2
+project_name: eitri
+
+# Homebrew builds from the checksummed source archive, with Go managed by brew.
+# Scoop needs Windows packages for both supported processor architectures.
+builds:
+  - id: windows
+    main: .
+    binary: eitri
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: windows
+    ids:
+      - windows
+    formats:
+      - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+source:
+  enabled: true
+  name_template: "{{ .ProjectName }}_{{ .Version }}_source"
+  format: tar.gz
+  prefix_template: "{{ .ProjectName }}-{{ .Version }}/"
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  github:
+    owner: veryshyjelly
+    name: eitri
+  prerelease: auto
+
+changelog:
+  sort: asc

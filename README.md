@@ -50,9 +50,35 @@ Eitri works with the [Competitive Companion](https://github.com/jmerle/competiti
 
 ## Installation
 
-You need [Go](https://go.dev/dl/) 1.25.11 or newer.
+### Homebrew (macOS and Linux)
 
+```sh
+brew tap veryshyjelly/eitri https://github.com/veryshyjelly/eitri.git
+brew install veryshyjelly/eitri/eitri
 ```
+
+Homebrew manages the Go build dependency for you. Update with
+`brew update && brew upgrade veryshyjelly/eitri/eitri`.
+
+### Scoop (Windows)
+
+```powershell
+scoop bucket add eitri https://github.com/veryshyjelly/eitri.git
+scoop install eitri/eitri
+```
+
+Windows x64 and ARM64 are supported. Update with `scoop update eitri`.
+
+The Homebrew tap and Scoop bucket become available after the first
+[package release](RELEASING.md) finishes. Neither installation method requires
+manually running `go install` or downloading an executable. You still need your
+solution language's compiler/interpreter and the Competitive Companion extension.
+
+### Go
+
+If you already have [Go](https://go.dev/dl/) 1.25.11 or newer:
+
+```sh
 go install github.com/veryshyjelly/eitri@latest
 ```
 

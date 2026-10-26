@@ -25,6 +25,9 @@ import (
 	"github.com/veryshyjelly/eitri/watcher"
 )
 
+// version is set from the release tag by the package builders.
+var version = "dev"
+
 // CLI represents the command-line interface arguments and flags for the application.
 type CLI struct {
 	Config   string `help:"Path to the configuration file." default:"./eitri.yml" short:"c"`
@@ -45,7 +48,7 @@ func main() {
 
 func run(cli CLI) error {
 	if cli.Version {
-		fmt.Println("eitri version 0.1.0")
+		fmt.Println("eitri version " + version)
 		return nil
 	}
 	logPath := filepath.Join(os.TempDir(), "eitri.log")

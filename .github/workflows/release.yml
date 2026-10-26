@@ -1,0 +1,69 @@
+name: Release packages
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable release tag (for example v1.0.1)
+        required: true
+
+permissions:
+  contents: write
+
+# A single publisher updates both package definitions on main.
+concurrency:
+  group: package-release
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  release:
+    if: github.repository == 'veryshyjelly/eitri'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Validate release tag
+        run: |
+          python -c 'import os; from scripts.package_managers import validate_tag; validate_tag(os.environ["RELEASE_TAG"])'
+          test "$(git describe --tags --exact-match HEAD)" = "$RELEASE_TAG"
+      - run: go test ./...
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: python -m unittest discover -s scripts -p 'test_*.py'
+      - name: Publish release assets
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: v2.19.0
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate verified package definitions
+        run: python scripts/package_managers.py --tag "$RELEASE_TAG"
+      - name: Update Homebrew tap and Scoop bucket
+        run: |
+          git fetch origin main
+          git switch -C package-update origin/main
+          mkdir -p Formula bucket
+          cp dist/package-managers/Formula/eitri.rb Formula/eitri.rb
+          cp dist/package-managers/bucket/eitri.json bucket/eitri.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Formula/eitri.rb bucket/eitri.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update Homebrew and Scoop packages to $RELEASE_TAG"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi

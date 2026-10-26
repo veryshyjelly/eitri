@@ -3,3 +3,5 @@
 /eitri
 /eitri.exe
 *.test
+/dist/
+__pycache__/
