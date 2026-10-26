@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -191,6 +192,51 @@ func TestEditorPathWithSpaces(t *testing.T) {
 	app.Editor = `{{ .Missing }}`
 	if _, err := app.EditorCommand(context.Background()); err == nil {
 		t.Fatal("invalid editor template accepted")
+	}
+}
+
+func TestSplitEditorCommandPreservesFilename(t *testing.T) {
+	for _, filename := range []string{
+		`C:\Users\Runner\space in workspace\nested\one.txt`,
+		`\\server\share\space in workspace\one.txt`,
+		`/workspace/quotes 'and "double"/one.txt`,
+		`/workspace/__EITRI_FILENAME__/one.txt`,
+	} {
+		for _, quoting := range []string{`%s`, `"%s"`, `'%s'`} {
+			t.Run(filename+quoting, func(t *testing.T) {
+				command := `editor --wait ` + fmt.Sprintf(quoting, filename)
+				args, err := splitEditorCommand(command, filename)
+				if err != nil || !slices.Equal(args, []string{"editor", "--wait", filename}) {
+					t.Fatalf("args %q, error %v", args, err)
+				}
+			})
+		}
+	}
+	filename := `C:\space in workspace\one.txt`
+	command := `"editor with spaces" --goto "` + filename + `:12" "` + filename + `" ""`
+	args, err := splitEditorCommand(command, filename)
+	if err != nil || !slices.Equal(args, []string{"editor with spaces", "--goto", filename + ":12", filename, ""}) {
+		t.Fatalf("args %q, error %v", args, err)
+	}
+	if _, err := splitEditorCommand(`editor "unterminated `+filename, filename); err == nil {
+		t.Fatal("invalid command quoting accepted")
+	}
+}
+
+func TestEditorTemplateFunctionsUseRealFilename(t *testing.T) {
+	app := fixtureApp(t)
+	app.Editor = `editor --name-length {{ len .Filename }} "{{ .Filename }}"`
+	command, err := app.EditorCommand(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	name, err := app.FileName()
+	if err != nil {
+		t.Fatal(err)
+	}
+	filename := config.ResolvePath(app.Root, name)
+	if !slices.Equal(command.Args, []string{"editor", "--name-length", fmt.Sprint(len(filename)), filename}) {
+		t.Fatalf("template received an incorrect filename: %q", command.Args)
 	}
 }
 

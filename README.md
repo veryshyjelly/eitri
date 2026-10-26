@@ -69,11 +69,6 @@ scoop install eitri/eitri
 
 Windows x64 and ARM64 are supported. Update with `scoop update eitri`.
 
-The Homebrew tap and Scoop bucket become available after the first
-[package release](RELEASING.md) finishes. Neither installation method requires
-manually running `go install` or downloading an executable. You still need your
-solution language's compiler/interpreter and the Competitive Companion extension.
-
 ### Go
 
 If you already have [Go](https://go.dev/dl/) 1.25.11 or newer:

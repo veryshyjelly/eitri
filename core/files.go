@@ -119,7 +119,7 @@ func (app App) CreateFile() error {
 }
 
 // EditorCommand prepares a direct argv invocation; shell operators are never
-// evaluated implicitly. Quote {{ .Filename }} in editor when paths contain spaces.
+// evaluated implicitly. The filename retains its literal spaces and backslashes.
 func (app App) EditorCommand(ctx context.Context) (*exec.Cmd, error) {
 	name, err := app.FileName()
 	if err != nil {
@@ -133,7 +133,7 @@ func (app App) EditorCommand(ctx context.Context) (*exec.Cmd, error) {
 	if err != nil {
 		return nil, err
 	}
-	args, err := shlex.Split(command)
+	args, err := splitEditorCommand(command, path)
 	if err != nil {
 		return nil, fmt.Errorf("editor command: %w", err)
 	}
@@ -143,6 +143,25 @@ func (app App) EditorCommand(ctx context.Context) (*exec.Cmd, error) {
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Dir = app.Root
 	return cmd, nil
+}
+
+// splitEditorCommand protects the rendered filename while parsing the command.
+// Inserting it after tokenization preserves literal backslashes and quotes (and
+// keeps an unquoted filename containing spaces in a single argument). Render
+// templates with the real filename first so template functions still see it.
+func splitEditorCommand(command, filename string) ([]string, error) {
+	marker := "__EITRI_FILENAME__"
+	for strings.Contains(command, marker) {
+		marker += "_"
+	}
+	args, err := shlex.Split(strings.ReplaceAll(command, filename, marker))
+	if err != nil {
+		return nil, err
+	}
+	for i := range args {
+		args[i] = strings.ReplaceAll(args[i], marker, filename)
+	}
+	return args, nil
 }
 
 // libraries reads configured snippets after centralized path discovery.
