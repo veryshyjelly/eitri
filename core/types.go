@@ -1,6 +1,12 @@
 package core
 
-import "github.com/veryshyjelly/eitri/config"
+import (
+	"errors"
+
+	"github.com/veryshyjelly/eitri/config"
+)
+
+var ErrNoProblem = errors.New("no problem is loaded")
 
 type App struct {
 	Root string

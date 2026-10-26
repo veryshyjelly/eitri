@@ -221,6 +221,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.watch.Select("")
 		m = m.setProblem(msg).updatePanes()
 		return m, m.prepare(m.Config.CreateFile)
+	case AddTestCaseRequest:
+		err := msg.Context.Err()
+		if err == nil && m.Url == "" {
+			err = core.ErrNoProblem
+		}
+		if err == nil {
+			m = m.addTestCase(msg.Test)
+		}
+		msg.Reply <- err
+		return m, nil
 	case prepared:
 		if msg.problemID != m.problemID {
 			return m, nil

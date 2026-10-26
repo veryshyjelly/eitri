@@ -110,15 +110,31 @@ func run(cli CLI) error {
 	model := tui.NewModel(ctx, root, cfg, orientation, watch, submissions)
 	defer model.Close()
 	p := tea.NewProgram(tui.NewSplash(model), tea.WithContext(ctx))
-	intake := make(chan core.Info, 16)
-	srv := server.New(listener.Addr().String(), func(requestCtx context.Context, info core.Info) error {
+	intake := make(chan tea.Msg, 16)
+	enqueue := func(requestCtx context.Context, msg tea.Msg) error {
 		deliveryCtx, stop := context.WithTimeout(requestCtx, 5*time.Second)
 		defer stop()
 		select {
-		case intake <- info:
+		case intake <- msg:
 			return nil
 		case <-deliveryCtx.Done():
 			return deliveryCtx.Err()
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	srv := server.New(listener.Addr().String(), func(ctx context.Context, info core.Info) error {
+		return enqueue(ctx, info)
+	}, func(requestCtx context.Context, test core.Test) error {
+		reply := make(chan error, 1)
+		if err := enqueue(requestCtx, tui.AddTestCaseRequest{Context: requestCtx, Test: test, Reply: reply}); err != nil {
+			return err
+		}
+		select {
+		case err := <-reply:
+			return err
+		case <-requestCtx.Done():
+			return requestCtx.Err()
 		case <-ctx.Done():
 			return ctx.Err()
 		}

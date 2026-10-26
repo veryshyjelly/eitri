@@ -47,10 +47,11 @@ func (s *Submissions) take() Submission {
 }
 
 // New returns a server with a private mux and bounded request lifetimes. The
-// delivery callback must honor request cancellation when its intake queue is full.
-func New(addr string, deliver func(context.Context, core.Info) error, submissions *Submissions) *http.Server {
+// Callbacks must honor cancellation when intake is full or the UI is paused.
+func New(addr string, deliver func(context.Context, core.Info) error, addTest func(context.Context, core.Test) error, submissions *Submissions) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", HandleData(deliver))
+	mux.HandleFunc("/tests", HandleAddTest(addTest))
 	mux.HandleFunc("/submit", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodPost {
 			w.Header().Set("Allow", "GET, POST")
@@ -74,27 +75,8 @@ func HandleData(deliver func(context.Context, core.Info) error) http.HandlerFunc
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, MaxBodyBytes)
-		defer r.Body.Close()
-		decoder := json.NewDecoder(r.Body)
 		var data core.Info
-		err := decoder.Decode(&data)
-		if err == nil {
-			var extra any
-			if e := decoder.Decode(&extra); e != io.EOF {
-				if e == nil {
-					e = errors.New("multiple JSON values")
-				}
-				err = e
-			}
-		}
-		if err != nil {
-			var oversized *http.MaxBytesError
-			status := http.StatusBadRequest
-			if errors.As(err, &oversized) {
-				status = http.StatusRequestEntityTooLarge
-			}
-			http.Error(w, "invalid problem JSON: "+err.Error(), status)
+		if !decodeJSON(w, r, &data) {
 			return
 		}
 		u, err := url.Parse(data.Url)
@@ -108,4 +90,67 @@ func HandleData(deliver func(context.Context, core.Info) error) http.HandlerFunc
 		}
 		w.WriteHeader(http.StatusOK)
 	}
+}
+
+// HandleAddTest appends a sample to the active problem through the application's
+// event loop. The callback returns only after the sample has been installed.
+func HandleAddTest(addTest func(context.Context, core.Test) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		// Pointers distinguish missing/null fields from intentionally empty text.
+		var data struct {
+			Input  *string `json:"input"`
+			Output *string `json:"output"`
+		}
+		if !decodeJSON(w, r, &data) {
+			return
+		}
+		if data.Input == nil || data.Output == nil {
+			http.Error(w, "input and output must both be strings (empty strings are allowed)", http.StatusBadRequest)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		if err := addTest(ctx, core.Test{Input: *data.Input, Output: *data.Output}); err != nil {
+			if errors.Is(err, core.ErrNoProblem) {
+				http.Error(w, err.Error(), http.StatusConflict)
+			} else {
+				http.Error(w, "test case intake unavailable", http.StatusServiceUnavailable)
+			}
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]bool{"added": true})
+	}
+}
+
+func decodeJSON(w http.ResponseWriter, r *http.Request, value any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, MaxBodyBytes)
+	defer r.Body.Close()
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(value)
+	if err == nil {
+		var extra any
+		if e := decoder.Decode(&extra); e != io.EOF {
+			if e == nil {
+				e = errors.New("multiple JSON values")
+			}
+			err = e
+		}
+	}
+	if err == nil {
+		return true
+	}
+	var oversized *http.MaxBytesError
+	status := http.StatusBadRequest
+	if errors.As(err, &oversized) {
+		status = http.StatusRequestEntityTooLarge
+	}
+	http.Error(w, "invalid JSON: "+err.Error(), status)
+	return false
 }

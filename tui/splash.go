@@ -41,6 +41,8 @@ func (s Splash) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		s.home, cmd = s.home.Update(msg)
 	case core.Info:
 		return s.home.Update(msg)
+	case AddTestCaseRequest:
+		s.home, cmd = s.home.Update(msg)
 	}
 	return s, cmd
 }

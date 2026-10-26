@@ -268,3 +268,84 @@ func TestLargeOutputDisplayIsBounded(t *testing.T) {
 		t.Fatalf("unbounded display: %d lines", lines)
 	}
 }
+
+func TestAddTestCaseRequest(t *testing.T) {
+	m := testModel(t)
+	ctx, cancel := context.WithCancel(m.problemCtx)
+	m.runCancel = cancel
+	m.Status = core.Running
+	oldGeneration := m.generation
+	reply := make(chan error, 1)
+	updated, cmd := m.Update(AddTestCaseRequest{
+		Context: context.Background(), Test: core.Test{Input: "new\n", Output: "answer\n"}, Reply: reply,
+	})
+	m = updated.(Model)
+	if err := <-reply; err != nil {
+		t.Fatal(err)
+	}
+	if cmd != nil || len(m.Tests) != 3 || m.Tests[2].Input != "new\n" || m.Tests[2].Answer != "answer\n" || m.Tests[2].Status != core.NotAvailable {
+		t.Fatalf("unexpected test addition: %+v", m.Tests)
+	}
+	if ctx.Err() == nil || m.Status != core.NotAvailable || m.generation == oldGeneration {
+		t.Fatal("adding a test did not invalidate the active run")
+	}
+	updated, _ = m.Update(runResult{generation: oldGeneration, tests: []core.Testcase{{Status: core.Accepted}}})
+	if len(updated.(Model).Tests) != 3 {
+		t.Fatal("stale run overwrote the new test")
+	}
+
+	canceled, stop := context.WithCancel(context.Background())
+	stop()
+	updated, _ = m.Update(AddTestCaseRequest{Context: canceled, Test: core.Test{}, Reply: reply})
+	if !errors.Is(<-reply, context.Canceled) || len(updated.(Model).Tests) != 3 {
+		t.Fatal("canceled request changed tests")
+	}
+}
+
+func TestAddTestCaseInOverlays(t *testing.T) {
+	for _, name := range []string{"help", "form", "splash", "splash help"} {
+		t.Run(name, func(t *testing.T) {
+			m := testModel(t)
+			var overlay tea.Model
+			want := 3
+			if strings.HasPrefix(name, "splash") {
+				m.Problem = core.Problem{}
+				m.Tests = nil
+				want = 0
+			}
+			switch name {
+			case "help":
+				overlay = Help{parent: m}
+			case "form":
+				overlay = NewAddTestCase(m)
+			case "splash":
+				overlay = NewSplash(m)
+			case "splash help":
+				overlay = Help{parent: NewSplash(m)}
+			}
+			reply := make(chan error, 1)
+			updated, _ := overlay.Update(AddTestCaseRequest{Context: context.Background(), Test: core.Test{}, Reply: reply})
+			err := <-reply
+			if want == 0 && !errors.Is(err, core.ErrNoProblem) || want > 0 && err != nil {
+				t.Fatalf("unexpected acknowledgment: %v", err)
+			}
+			for {
+				switch value := updated.(type) {
+				case Help:
+					updated = value.parent
+				case *AddTestCase:
+					updated = value.parent
+				case Splash:
+					updated = value.home
+				case Model:
+					if len(value.Tests) != want {
+						t.Fatalf("test count %d, want %d", len(value.Tests), want)
+					}
+					return
+				default:
+					t.Fatalf("unexpected model %T", updated)
+				}
+			}
+		})
+	}
+}

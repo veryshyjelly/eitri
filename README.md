@@ -226,6 +226,32 @@ Roots and dependencies use alphabetical ordering, so independent snippets have s
 
 ---
 
+## Add test cases over HTTP
+
+While Eitri is running with a problem loaded, append a custom test case with
+`POST http://127.0.0.1:6174/tests`:
+
+```sh
+curl --fail-with-body http://127.0.0.1:6174/tests \
+  -H 'Content-Type: application/json' \
+  -d '{"input":"1 2\n","output":"3\n"}'
+```
+
+`input` is stdin and `output` is the expected stdout. Both fields are required
+strings; empty strings are valid. Each request adds one case to the problem
+active when the application processes it. Success returns `201 Created` with
+`{"added":true}` after the case is installed in the TUI. It works while help or
+the add-test form is open, cancels an active run, and marks the overall verdict
+`NA`. Press `r` to run the updated test set. Cases remain in memory until the
+problem is replaced or Eitri exits.
+
+The endpoint returns `400` for invalid JSON or fields, `405` for methods other
+than POST, `409` when no problem is loaded, `413` for bodies exceeding 4 MiB, and
+`503` when the application cannot process the request within five seconds or is
+shutting down. Requests that expire before processing do not add a case.
+
+---
+
 ## Execution and lifecycle
 
 Rapid saves are debounced for 200 ms. Eitri watches parent directories, supports atomic replacement saves, and follows directories created after problem intake. A new run cancels its predecessor; background operations are serialized, and obsolete results cannot replace the current problem or run. Tests keep their original sample order and execute sequentially.
@@ -261,7 +287,7 @@ These are ideas, not implemented features:
 
 ## Contributing
 
-Run `go test ./...`, `go vet ./...`, `go test -race ./...`, and `go build ./...` before submitting changes. [Engineering notes](REFACTOR.md) describe subsystem ownership and validation.
+Run `go test ./...`, `go vet ./...`, `go test -race ./...`, and `go build ./...` before submitting changes. 
 
 Contributions, issues, and feature requests are welcome. See the [issues page](https://github.com/veryshyjelly/eitri/issues).
 

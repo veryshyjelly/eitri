@@ -54,10 +54,10 @@ func TestProblemLifecycle(t *testing.T) {
 	m.writeClipboard = func(_ context.Context, text string) error { copied <- text; return nil }
 
 	changed, selected := make(chan struct{}, 1), make(chan struct{}, 1)
-	accepted := make(chan struct{}, 1)
+	accepted := make(chan int, 1)
 	p := tea.NewProgram(NewSplash(m), tea.WithContext(ctx), tea.WithInput(nil), tea.WithOutput(io.Discard), tea.WithoutRenderer(), tea.WithoutSignalHandler(), tea.WithWindowSize(80, 24), tea.WithFilter(func(_ tea.Model, msg tea.Msg) tea.Msg {
 		if result, ok := msg.(runResult); ok && core.GetFinalStatus(result.tests) == core.Accepted {
-			accepted <- struct{}{}
+			accepted <- len(result.tests)
 		}
 		return msg
 	}))
@@ -104,8 +104,22 @@ func TestProblemLifecycle(t *testing.T) {
 			t.Error("watcher did not stop")
 		}
 	}()
-	transport := server.New("", func(_ context.Context, info core.Info) error { p.Send(info); return nil }, submissions)
+	transport := server.New("", func(_ context.Context, info core.Info) error { p.Send(info); return nil }, func(ctx context.Context, test core.Test) error {
+		reply := make(chan error, 1)
+		p.Send(AddTestCaseRequest{Context: ctx, Test: test, Reply: reply})
+		select {
+		case err := <-reply:
+			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}, submissions)
 	w := httptest.NewRecorder()
+	transport.Handler.ServeHTTP(w, httptest.NewRequest("POST", "/tests", strings.NewReader(`{"input":"7\n","output":"7"}`)))
+	if w.Code != http.StatusConflict {
+		t.Fatalf("test without a problem: %d", w.Code)
+	}
+	w = httptest.NewRecorder()
 	transport.Handler.ServeHTTP(w, httptest.NewRequest("POST", "/", strings.NewReader(`{"name":"One","url":"https://example.com/problem/one","timeLimit":2000,"tests":[{"input":"42\n","output":"42"}]}`)))
 	if w.Code != 200 {
 		t.Fatal(w.Code)
@@ -133,9 +147,26 @@ ready:
 		t.Fatal("save not observed")
 	}
 	select {
-	case <-accepted:
+	case count := <-accepted:
+		if count != 1 {
+			t.Fatalf("initial test count: %d", count)
+		}
 	case <-ctx.Done():
 		t.Fatal("samples did not pass")
+	}
+	w = httptest.NewRecorder()
+	transport.Handler.ServeHTTP(w, httptest.NewRequest("POST", "/tests", strings.NewReader(`{"input":"7\n","output":"7"}`)))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("add test: %d %s", w.Code, w.Body.String())
+	}
+	p.Send(tea.KeyPressMsg{Code: 'r'})
+	select {
+	case count := <-accepted:
+		if count != 2 {
+			t.Fatalf("updated test count: %d", count)
+		}
+	case <-ctx.Done():
+		t.Fatal("updated samples did not pass")
 	}
 	p.Send(tea.KeyPressMsg{Code: 'c'})
 	select {
