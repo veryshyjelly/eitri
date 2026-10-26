@@ -1,0 +1,17 @@
+{
+  "version": "1.1.0",
+  "description": "Competitive programming companion for the terminal",
+  "homepage": "https://github.com/veryshyjelly/eitri",
+  "license": "GPL-2.0-only",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/veryshyjelly/eitri/releases/download/v1.1.0/eitri_1.1.0_windows_amd64.zip",
+      "hash": "65367ff3fdc387f5aea518c9c7f94d00e62e677f4e5e2bb75e1e8366b1016153"
+    },
+    "arm64": {
+      "url": "https://github.com/veryshyjelly/eitri/releases/download/v1.1.0/eitri_1.1.0_windows_arm64.zip",
+      "hash": "0dbfb56ded688c5a6756672b89d8e6b7f3195475fb4754172a25b95fe2513abd"
+    }
+  },
+  "bin": "eitri.exe"
+}
