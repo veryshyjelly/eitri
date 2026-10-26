@@ -2,10 +2,15 @@ package watcher
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
+	"syscall"
 	"testing"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 func receive[T any](t *testing.T, events <-chan any) T {
@@ -172,6 +177,12 @@ func TestMissingParentRecovery(t *testing.T) {
 	if got := receive[Changed](t, events).Path; got != target {
 		t.Fatalf("got %s", got)
 	}
+	if err := os.WriteFile(target, []byte("saved after recovery"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := receive[Changed](t, events).Path; got != target {
+		t.Fatalf("save after recovery: got %s", got)
+	}
 	cancel()
 	select {
 	case err := <-done:
@@ -180,5 +191,104 @@ func TestMissingParentRecovery(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("watcher did not stop")
+	}
+}
+
+type registrationHooks struct {
+	add, remove func(string) error
+}
+
+func (h registrationHooks) Add(path string) error    { return h.add(path) }
+func (h registrationHooks) Remove(path string) error { return h.remove(path) }
+
+func TestWatchParentRescansAfterRegistration(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "later", "nested", "source.txt")
+	var added, removed []string
+	fs := registrationHooks{
+		add: func(path string) error {
+			added = append(added, path)
+			if path == root {
+				// These creates happen before Add installs the ancestor watch.
+				// No filesystem notification can be relied upon to discover them.
+				if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+					return err
+				}
+				return os.WriteFile(target, []byte("created during registration"), 0644)
+			}
+			return nil
+		},
+		remove: func(path string) error {
+			removed = append(removed, path)
+			return nil
+		},
+	}
+	directory, changed, err := watchParent(fs, target, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if directory != filepath.Dir(target) || !changed {
+		t.Fatalf("watch stuck at %s, changed %v", directory, changed)
+	}
+	if !slices.Equal(added, []string{root, filepath.Dir(target)}) || !slices.Equal(removed, []string{root}) {
+		t.Fatalf("added %v, removed %v", added, removed)
+	}
+	_, changed, err = watchParent(fs, target, directory)
+	if err != nil || changed || len(added) != 2 {
+		t.Fatalf("stable watch was registered again: changed %v, error %v, added %v", changed, err, added)
+	}
+}
+
+func TestWatchParentDisappearsDuringRegistration(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "later", "source.txt")
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		t.Fatal(err)
+	}
+	fs := registrationHooks{
+		add: func(path string) error {
+			if path == filepath.Dir(target) {
+				if err := os.RemoveAll(path); err != nil {
+					return err
+				}
+				return os.ErrNotExist
+			}
+			return nil
+		},
+		remove: func(string) error { return nil },
+	}
+	directory, changed, err := watchParent(fs, target, "")
+	if err != nil || !changed || directory != root {
+		t.Fatalf("watch %s, changed %v, error %v", directory, changed, err)
+	}
+}
+
+func TestWatchParentRemovingDeletedWatch(t *testing.T) {
+	for _, removeErr := range []error{fsnotify.ErrNonExistentWatch, os.ErrNotExist, syscall.EINVAL, os.ErrPermission} {
+		t.Run(removeErr.Error(), func(t *testing.T) {
+			root := t.TempDir()
+			target := filepath.Join(root, "later", "source.txt")
+			old := filepath.Join(root, "deleted")
+			fs := registrationHooks{
+				add: func(string) error { return nil },
+				remove: func(path string) error {
+					if path != old {
+						t.Fatalf("removing %s, want %s", path, old)
+					}
+					return removeErr
+				},
+			}
+			directory, changed, err := watchParent(fs, target, old)
+			if directory != root || !changed {
+				t.Fatalf("watch %s, changed %v", directory, changed)
+			}
+			if errors.Is(removeErr, os.ErrPermission) {
+				if !errors.Is(err, os.ErrPermission) {
+					t.Fatalf("cleanup failure was hidden: %v", err)
+				}
+			} else if err != nil {
+				t.Fatalf("already-removed watch caused an error: %v", err)
+			}
+		})
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -66,51 +67,7 @@ func (w *Watcher) Run(ctx context.Context, root string, emit func(any)) error {
 		}
 		ticks = nil
 	}
-	// When a routed parent does not exist yet, watch its nearest existing
-	// ancestor and move the registration down as directories are created.
-	refresh := func() (bool, error) {
-		target := ""
-		if path != "" {
-			target = filepath.Dir(path)
-			for {
-				stat, err := os.Stat(target)
-				if err == nil && !stat.IsDir() {
-					return false, fmt.Errorf("watch parent is not a directory: %s", target)
-				}
-				if err == nil {
-					if target == directory {
-						return false, nil
-					}
-					err = fs.Add(target)
-					if err == nil {
-						break
-					}
-				}
-				if !os.IsNotExist(err) {
-					return false, err
-				}
-				// A directory may vanish between Stat and Add during a tree removal.
-				// Move upward immediately instead of treating that expected race as fatal.
-				parent := filepath.Dir(target)
-				if parent == target {
-					return false, err
-				}
-				target = parent
-			}
-		}
-		if target == directory {
-			return false, nil
-		}
 
-		old := directory
-		directory = target
-		if old != "" {
-			if err := fs.Remove(old); err != nil && !errors.Is(err, fsnotify.ErrNonExistentWatch) && !os.IsNotExist(err) {
-				return true, err
-			}
-		}
-		return true, nil
-	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -126,7 +83,8 @@ func (w *Watcher) Run(ctx context.Context, root string, emit func(any)) error {
 				}
 			}
 			path = next
-			if _, err := refresh(); err != nil {
+			directory, _, err = watchParent(fs, path, directory)
+			if err != nil {
 				emit(Error{fmt.Errorf("watch source directory: %w", err)})
 			}
 
@@ -145,7 +103,8 @@ func (w *Watcher) Run(ctx context.Context, root string, emit func(any)) error {
 				relevant = true
 			}
 			if directory != filepath.Dir(path) {
-				moved, err := refresh()
+				var moved bool
+				directory, moved, err = watchParent(fs, path, directory)
 				if err != nil {
 					emit(Error{fmt.Errorf("restore source watch: %w", err)})
 				}
@@ -170,6 +129,67 @@ func (w *Watcher) Run(ctx context.Context, root string, emit func(any)) error {
 				return nil
 			}
 			emit(Error{fmt.Errorf("filesystem watcher: %w", err)})
+		}
+	}
+}
+
+// directoryWatcher is the registration boundary used by watchParent. Keeping
+// registration separate lets tests reproduce filesystem changes inside Add.
+type directoryWatcher interface {
+	Add(string) error
+	Remove(string) error
+}
+
+// watchParent follows the nearest existing parent until the watch and the
+// directory tree agree. After Add, rescan from the desired parent: a child may
+// have appeared before its parent's watch was installed, producing no event.
+// Once a scan leaves the registration unchanged, subsequent creates are watched.
+func watchParent(fs directoryWatcher, path, directory string) (string, bool, error) {
+	changed := false
+	for {
+		target := ""
+		if path != "" {
+			target = filepath.Dir(path)
+			for {
+				stat, err := os.Stat(target)
+				if err == nil && !stat.IsDir() {
+					return directory, changed, fmt.Errorf("watch parent is not a directory: %s", target)
+				}
+				if err == nil {
+					if target == directory {
+						return directory, changed, nil
+					}
+					err = fs.Add(target)
+					if err == nil {
+						break
+					}
+				}
+				if !os.IsNotExist(err) {
+					return directory, changed, err
+				}
+				// A directory may vanish between Stat and Add during a tree removal.
+				// Move upward immediately instead of treating that expected race as fatal.
+				parent := filepath.Dir(target)
+				if parent == target {
+					return directory, changed, err
+				}
+				target = parent
+			}
+		}
+		if target == directory {
+			return directory, changed, nil
+		}
+
+		old := directory
+		directory = target
+		changed = true
+		if old != "" {
+			// Linux invalidates inotify descriptors as soon as a directory is
+			// deleted. Remove may see EINVAL before fsnotify reads DELETE_SELF
+			// and reports ErrNonExistentWatch; either means cleanup is complete.
+			if err := fs.Remove(old); err != nil && !errors.Is(err, fsnotify.ErrNonExistentWatch) && !os.IsNotExist(err) && !errors.Is(err, syscall.EINVAL) {
+				return directory, changed, err
+			}
 		}
 	}
 }
