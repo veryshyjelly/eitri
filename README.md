@@ -31,7 +31,7 @@ Use a compiler, an interpreter, or a project build command. Keep source transfor
 brew install veryshyjelly/tap/eitri
 ```
 
-The formula is maintained in [veryshyjelly/homebrew-tap](https://github.com/veryshyjelly/homebrew-tap). If you used the previous tap, run `brew uninstall veryshyjelly/eitri/eitri` and `brew untap veryshyjelly/eitri` before installing from the new tap.
+The formula is maintained in [veryshyjelly/homebrew-tap](https://github.com/veryshyjelly/homebrew-tap). 
 
 ### Windows · Scoop
 
