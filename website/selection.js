@@ -1,0 +1,1 @@
+export function selection(search){const p=new URLSearchParams(search);return {lang:['cpp','python','rust','ocaml'].includes(p.get('lang'))?p.get('lang'):'cpp',os:['linux','macos','windows'].includes(p.get('os'))?p.get('os'):'linux'}}

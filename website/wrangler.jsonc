@@ -1,0 +1,15 @@
+{
+  "name": "eitri-website",
+  "account_id": "4b44d06d47b4816356e46d075c4b643a",
+  "compatibility_date": "2026-11-14",
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "force-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    { "pattern": "eitri.veryshyjelly.in", "custom_domain": true }
+  ]
+}

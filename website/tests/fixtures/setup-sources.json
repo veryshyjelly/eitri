@@ -1,0 +1,339 @@
+[
+  {
+    "id": "cpp",
+    "revision": "40ff659c8d3239818190ebd7781bd1cc8ecc630d",
+    "config": "\nauthor: Ayush Biswas\n\neditor: \"code {{ .Filename }}\"\n\n# How to generate the destination filename.\nfilename:\n  rules:\n    - site: codeforces.com\n      regex: \"(?:problemset/problem|contest)/(\\\\d+)(?:/problem)?/([A-Za-z0-9]+)\"\n      template: './src/bin/{{ index .Captures 1 }}-{{ index .Captures 2 }}-{{ .Title | stripPrefix \".\"  | toKebabCase }}.cpp'\n\n    - site: atcoder.jp\n      regex: \"contests/([^/]+)/tasks/([^_]+)_([a-z]+)\"\n      template: './src/bin/{{ index .Captures 2 }}-{{ index .Captures 3 | toLowerCase }}{{if gt (.Title | stripPrefix \"-\" | len) 0}}-{{ .Title | stripPrefix \"-\"  | toKebabCase }}{{- end -}}.cpp'\n\n    - site: cses.fi\n      regex: \"problemset/task/(\\\\d+)/?$\"\n      template: './src/bin/cses-{{ index .Captures 1 }}-{{ .Title | toKebabCase }}.cpp'\n\n    - site: judge.u-aizu.ac.jp\n      regex: \"description\\\\.jsp\\\\?id=([A-Za-z0-9_]+)\"\n      template: './src/bin/aoj-{{ index .Captures 1 }}-{{ .Title | toKebabCase }}.cpp'\n\n    - site: open.kattis.com\n      regex: \"problems/([^/?]+)/?\"\n      template: \"./src/bin/{{ index .Captures 1 }}.cpp\"\n\n# Base source template.\ntemplate:\n  source: ./src/main.cpp\n  modifier: |\n    // Created by {{ .Author }} at {{ .Time }} \n    // {{ .Url }} \n    {{ .Code }}\n\n# Optional code post-processing.\ncode:\n  modifier: |\n    {{ .Header }}\n\n    {{ range .LibFiles }}\n    \n    {{ .Content }}\n    \n    {{end}}\n\n    {{ .Code }}\n\n# Library injection.\nlib:\n  regex: \"#include <{{.Name}}.hpp>\"\n  include:\n    _: \"./src/lib/\"\n\n# Compilation.\ncompiler:\n  name: C++\n  source: main.cpp\n  compile: g++ # empty if no compilation to be performed\n  args: \n    - -std=c++23 \n    - -fmax-errors=10 \n    - -lm \n    - -Wall\n    - -O2 \n    - main.cpp\n    - -o\n    - main\n  run: ./main\n\n# Behaviour\ncreate_file: true\nrun_on_save: true\n",
+    "paths": [
+      "src/lib/all.hpp",
+      "src/lib/convolution.hpp",
+      "src/lib/dsu.hpp",
+      "src/lib/fenwicktree.hpp",
+      "src/lib/internal_bit.hpp",
+      "src/lib/internal_csr.hpp",
+      "src/lib/internal_math.hpp",
+      "src/lib/internal_queue.hpp",
+      "src/lib/internal_scc.hpp",
+      "src/lib/internal_type_traits.hpp",
+      "src/lib/lazysegtree.hpp",
+      "src/lib/math.hpp",
+      "src/lib/maxflow.hpp",
+      "src/lib/mincostflow.hpp",
+      "src/lib/modint.hpp",
+      "src/lib/scc.hpp",
+      "src/lib/segtree.hpp",
+      "src/lib/string.hpp",
+      "src/lib/twosat.hpp",
+      "src/lib/utils.hpp",
+      "src/main.cpp"
+    ],
+    "templateSource": "/// @head begin\n#include <iostream>\n/// @head end\n\n/// @code begin\n#define vi vector<int>\n#define pi pair<int, int>\n#define ll long long\n\nusing namespace std;\n\n\nint main() {\n    cin.tie(nullptr);\n\n    printf(\"Hello World\");\n}\n/// @code end\n",
+    "template": "./src/main.cpp",
+    "compiler": {
+      "name": "C++",
+      "source": "main.cpp",
+      "compile": "g++",
+      "args": [
+        "-std=c++23",
+        "-fmax-errors=10",
+        "-lm",
+        "-Wall",
+        "-O2",
+        "main.cpp",
+        "-o",
+        "main"
+      ],
+      "run": "./main"
+    }
+  },
+  {
+    "id": "python",
+    "revision": "46d8fdb316c3574d3f865ee6d4f77d901a7d3cd5",
+    "config": "\nauthor: Ayush Biswas\n\neditor: \"code {{ .Filename }}\"\n\n# How to generate the destination filename.\nfilename:\n  rules:\n    - site: codeforces.com\n      regex: \"(?:problemset/problem|contest)/(\\\\d+)(?:/problem)?/([A-Za-z0-9]+)\"\n      template: './src/{{ index .Captures 1 }}-{{ index .Captures 2 | toLowerCase }}-{{ .Title | stripPrefix \".\" | toKebabCase }}.py'\n\n    - site: atcoder.jp\n      regex: \"contests/([^/]+)/tasks/([^_]+)_([a-z]+)\"\n      template: './src/{{ index .Captures 2 }}-{{ index .Captures 3 | toLowerCase }}{{if gt (len .Title) 0}}-{{ .Title | stripPrefix \"-\" | toKebabCase }}{{- end -}}.py'\n\n    - site: cses.fi\n      regex: \"problemset/task/(\\\\d+)/?$\"\n      template: './src/cses-{{ index .Captures 1 }}-{{ .Title | stripPrefix \"-\" | toKebabCase }}.py'\n\n    - site: judge.u-aizu.ac.jp\n      regex: \"description\\\\.jsp\\\\?id=([A-Za-z0-9_]+)\"\n      template: './src/aoj-{{ index .Captures 1 }}-{{ .Title | stripPrefix \"-\" | toKebabCase }}.py'\n\n    - site: open.kattis.com\n      regex: \"problems/([^/?]+)/?\"\n      template: \"./src/{{ index .Captures 1 }}.py\"\n\n# Base source template.\ntemplate:\n  source: ./main.py\n  modifier: |\n    # Created by {{ .Author }} at {{ .Time }} \n    # {{ .Url }}\n    {{ .Code }}\n\n# Optional code post-processing.\ncode:\n  modifier: |\n    {{range .LibFiles}}\n    \n    ### {{ .Name | toPascalCase }} ###\n    {{ .Content }}\n    ### {{ .Name | toPascalCase }} end ##\n    \n    {{end}}\n    \n    {{ .Code }}\n\n# Library injection.\nlib:\n  regex: \"from.*{{.Name}} import .*\"\n  include:\n    _: \"./cpio/\"\n\n# Compilation.\ncompiler:\n  name: Python\n  source: script.py\n  compile: python3 # empty if no compilation to be performed\n  args:\n    - -m\n    - py_compile\n    - script.py\n  run: python3 script.py\n\n# Behaviour\ncreate_file: true\nrun_on_save: true\n",
+    "paths": [
+      "cpio/__init__.py",
+      "cpio/cpio.py",
+      "cpio/input.py",
+      "cpio/types.py",
+      "main.py"
+    ],
+    "templateSource": "from cpio.cpio import sol_n\n\n# @code begin\n\n\n@sol_n(\"n; ints\")\ndef solution(n: int, a: list[int]) -> int:\n    return n * sum(a)\n\n\nsolution()\n\n# @code end\n",
+    "template": "./main.py",
+    "compiler": {
+      "name": "Python",
+      "source": "script.py",
+      "compile": "python3",
+      "args": [
+        "-m",
+        "py_compile",
+        "script.py"
+      ],
+      "run": "python3 script.py"
+    }
+  },
+  {
+    "id": "rust",
+    "revision": "1e3cb592bcc13dbf2a28e6cc731e350860b2c77c",
+    "config": "\nauthor: Ayush Biswas\n\neditor: \"zed {{ .Filename }}\"\n\n# How to generate the destination filename.\nfilename:\n  rules:\n    - site: codeforces.com\n      regex: \"(?:problemset/problem|contest|gym)/(\\\\d+)(?:/problem)?/([A-Za-z0-9]+)\"\n      template: './src/bin/{{ index .Captures 1 }}-{{ index .Captures 2 }}-{{ .Title | stripPrefix \".\"  | toKebabCase }}.rs'\n\n    - site: atcoder.jp\n      regex: \"contests/([^/]+)/tasks/([^_]+)_([a-z]+)\"\n      template: './src/bin/{{ index .Captures 2 }}-{{ index .Captures 3 | toLowerCase }}{{if gt (.Title | stripPrefix \"-\" | len) 0}}-{{ .Title | stripPrefix \"-\"  | toKebabCase }}{{- end -}}.rs'\n\n    - site: cses.fi\n      regex: \"problemset/task/(\\\\d+)/?$\"\n      template: \"./src/bin/cses-{{ index .Captures 1 }}-{{ .Title | toKebabCase }}.rs\"\n\n    - site: judge.u-aizu.ac.jp\n      regex: \"description\\\\.jsp\\\\?id=([A-Za-z0-9_]+)\"\n      template: \"./src/bin/aoj-{{ index .Captures 1 }}-{{ .Title | toKebabCase }}.rs\"\n\n    - site: open.kattis.com\n      regex: \"problems/([^/?]+)/?\"\n      template: \"./src/bin/{{ index .Captures 1 }}.rs\"\n\n# Base source template.\ntemplate:\n  source: ./src/main.rs\n  modifier: |\n    // Created by {{ .Author }} at {{ .Time }}\n    // {{ .Url }}\n    // {{ .Title }}\n    {{ .Code }}\n\n# Optional code post-processing.\ncode:\n  modifier: |\n    {{ .Code }}\n\n    {{ range .LibFiles }}\n\n    mod {{ .Name }} {\n      {{ .Content }}\n    }\n\n    {{end}}\n\n# Library injection.\nlib:\n  regex: \"use\\\\s*(super::)?{{.Name}}(::|;)\"\n  include:\n    _: \"./src/lib/\"\n\n# Compilation.\ncompiler:\n  name: Rust\n  source: main.rs\n  compile: rustc # empty if no compilation to be performed\n  args:\n    - --edition=2024\n    - -O\n    - main.rs\n  run: ./main\n\n# Behaviour\ncreate_file: true\nrun_on_save: true\n",
+    "paths": [
+      "src/lib/Cargo.toml",
+      "src/lib/astar.rs",
+      "src/lib/bfs.rs",
+      "src/lib/binary_lifting.rs",
+      "src/lib/binary_search.rs",
+      "src/lib/btreemultimap.rs",
+      "src/lib/cliques.rs",
+      "src/lib/connected_components.rs",
+      "src/lib/convolution.rs",
+      "src/lib/count_paths.rs",
+      "src/lib/cpio.rs",
+      "src/lib/cycle_detection.rs",
+      "src/lib/dfs.rs",
+      "src/lib/dijkstra.rs",
+      "src/lib/dsu.rs",
+      "src/lib/edmonds_karp.rs",
+      "src/lib/fenwicktree.rs",
+      "src/lib/fringe.rs",
+      "src/lib/grid.rs",
+      "src/lib/idastar.rs",
+      "src/lib/iddfs.rs",
+      "src/lib/indexmap.rs",
+      "src/lib/internal_bit.rs",
+      "src/lib/internal_math.rs",
+      "src/lib/internal_queue.rs",
+      "src/lib/internal_scc.rs",
+      "src/lib/internal_type_traits.rs",
+      "src/lib/itertools.rs",
+      "src/lib/kruskal.rs",
+      "src/lib/kuhn_munkres.rs",
+      "src/lib/lazysegtree.rs",
+      "src/lib/lib.rs",
+      "src/lib/math.rs",
+      "src/lib/matrix.rs",
+      "src/lib/maxflow.rs",
+      "src/lib/mincostflow.rs",
+      "src/lib/modint.rs",
+      "src/lib/monoid.rs",
+      "src/lib/multimap.rs",
+      "src/lib/noderefs.rs",
+      "src/lib/pathfinding.rs",
+      "src/lib/prim.rs",
+      "src/lib/scc.rs",
+      "src/lib/segtree.rs",
+      "src/lib/sieve.rs",
+      "src/lib/string.rs",
+      "src/lib/strongly_connected_components.rs",
+      "src/lib/superslice.rs",
+      "src/lib/topological_sort.rs",
+      "src/lib/twosat.rs",
+      "src/lib/yen.rs",
+      "src/main.rs"
+    ],
+    "templateSource": "use cp_lib::*;\n\n// @code begin\nuse cpio::*;\n\nsol_n! {\n    fn solution(\n        n: usize,\n        a: [usize]\n    ) -> usize {\n        let b = a.iter().min().unwrap();\n        let c = a.iter().max().unwrap();\n        (c - b) * (n - 1)\n    }\n}\n// @code end\n",
+    "template": "./src/main.rs",
+    "compiler": {
+      "name": "Rust",
+      "source": "main.rs",
+      "compile": "rustc",
+      "args": [
+        "--edition=2024",
+        "-O",
+        "main.rs"
+      ],
+      "run": "./main"
+    }
+  },
+  {
+    "id": "ac_rust",
+    "revision": "79464ff735cd9515764efb01ed7fb7146c7d6cbf",
+    "config": "\nauthor: Ayush Biswas\n\neditor: \"code {{ .Filename }}\"\n\n# How to generate the destination filename.\nfilename:\n  rules:\n    - site: atcoder.jp\n      regex: \"contests/([^/]+)/tasks/([^_]+)_([a-z]+)\"\n      template: \"./src/bin/{{ index .Captures 2 }}-{{ index .Captures 3 | toLowerCase }}.rs\"\n\n# Base source template.\ntemplate:\n  source: ./src/main.rs\n  modifier: |\n    // Created by {{ .Author }} at {{ .Time }}\n    // {{ .Url }}\n    // {{ .Title }}\n\n    {{ .Code }}\n\n# Optional code post-processing.\ncode:\n  modifier: |\n    #!/usr/bin/env rust-script\n\n    //! ```cargo\n    //! [package]\n    //! edition = \"2024\"\n    //!\n    //! [dependencies]\n    //! # 202411\u304b\u3089:\n    //! rpds = \"=1.1.1\"\n    //! rand_xorshift = \"=0.4.0\"\n    //! rand_xoshiro = \"=0.7.0\"\n    //! primal = \"=0.3.3\"\n    //! thiserror = \"=2.0.16\"\n    //!\n    //! # 202301\u304b\u3089:\n    //! ac-library-rs = \"=0.2.0\"\n    //! once_cell = \"=1.21.3\"\n    //! memoise = \"=0.3.2\"\n    //! btreemultimap = \"=0.1.1\"\n    //! bstr = \"=1.12.0\"\n    //!\n    //! # 202004\u304b\u3089\u7d9a\u6295:\n    //! num-bigint = \"=0.4.6\"\n    //! num-complex = \"=0.4.6\"\n    //! num-integer = \"=0.1.46\"\n    //! num-traits = \"=0.2.19\"\n    //!\n    //! libm = \"=0.2.15\"\n    //!\n    //! rand = \"=0.9.2\"\n    //! rand_chacha = \"=0.9.0\"\n    //! rand_distr = \"=0.5.1\"\n    //! proconio = { version = \"=0.5.0\", features = [\"derive\"] }\n    //!\n    //! indexmap = \"=2.11.0\"\n    //! regex = \"=1.11.2\"\n    //! superslice = \"=1.0.0\"\n    //! itertools = \"=0.14.0\"\n    //! maplit = \"=1.0.2\"\n    //! either = \"=1.15.0\"\n    //! im-rc = \"=15.1.0\"\n    //!\n    //! rustc-hash = \"=2.1.1\"\n    //! smallvec = { version = \"=1.15.1\", features = [\"const_generics\", \"const_new\", \"write\", \"union\", \"serde\", \"arbitrary\"] }\n    //! ```\n\n    #![allow(dead_code)]\n    #![allow(unused_imports)]\n\n    {{ .Code }}\n\n    {{ range .LibFiles }}\n\n    mod {{ .Name }} {\n      {{ .Content }}\n    }\n\n    {{end}}\n\n# Library injection.\nlib:\n  regex: \"use\\\\s*(super::)?{{.Name}}(::|;)\"\n  include:\n    cpio: \"./src/cpio.rs\"\n\n# Compilation.\ncompiler:\n  name: Rust\n  source: main.rs\n  compile: sh\n  args:\n    - -c\n    - |\n      while pgrep -x cargo >/dev/null; do\n        sleep 0.05\n      done\n  run: rust-script main.rs\n\n# Behaviour\ncreate_file: true\nrun_on_save: true\n",
+    "paths": [
+      "src/cpio.rs",
+      "src/main.rs"
+    ],
+    "templateSource": "use cpio::*;\nuse itertools::Itertools;\n\nsol! {\n    fn solution(\n        s: Chars\n    ) -> String {\n        s.iter().sorted().collect()\n    }\n}\n",
+    "template": "./src/main.rs",
+    "compiler": {
+      "name": "Rust",
+      "source": "main.rs",
+      "compile": "sh",
+      "args": [
+        "-c",
+        "while pgrep -x cargo >/dev/null; do\n  sleep 0.05\ndone\n"
+      ],
+      "run": "rust-script main.rs"
+    }
+  },
+  {
+    "id": "ocaml",
+    "revision": "ca43770520d8bd9af19d3511a3b4084b3e4443b9",
+    "config": "\nauthor: Ayush Biswas\n\neditor: \"code {{ .Filename }}\"\n\n# How to generate the destination filename.\nfilename:\n  rules:\n    - site: codeforces.com\n      regex: \"(?:problemset/problem|contest)/(\\\\d+)(?:/problem)?/([A-Za-z0-9]+)\"\n      template: './src/bin/cf_{{ index .Captures 1 }}_{{ index .Captures 2 }}_{{ .Title | stripPrefix \"-\" | toSnakeCase }}.ml'\n\n    - site: atcoder.jp\n      regex: \"contests/([^/]+)/tasks/([^_]+)_([a-z]+)\"\n      template: './src/bin/{{ index .Captures 2 }}_{{ index .Captures 3 | toLowerCase }}_{{ .Title | stripPrefix \"-\" | toSnakeCase }}.ml'\n\n    - site: cses.fi\n      regex: \"problemset/task/(\\\\d+)/?$\"\n      template: './src/bin/cses_{{ index .Captures 1 }}_{{ .Title | stripPrefix \"-\" | toSnakeCase }}.ml'\n\n    - site: judge.u-aizu.ac.jp\n      regex: \"description\\\\.jsp\\\\?id=([A-Za-z0-9_]+)\"\n      template: './src/bin/aoj_{{ index .Captures 1 }}_{{ .Title | stripPrefix \"-\" | toSnakeCase }}.ml'\n\n    - site: open.kattis.com\n      regex: \"problems/([^/?]+)/?\"\n      template: \"./src/bin/{{ index .Captures 1 }}.ml\"\n\n\n# Base source template.\ntemplate:\n  source: ./src/main.ml\n  modifier: |\n    (* Created by {{ .Author }} at {{ .Time }} \n       {{ .Url }} *)\n    {{ .Code }}\n\n# Optional code post-processing.\ncode:\n  modifier: |\n    module Lib = struct\n    {{range .LibFiles}}\n    \n    module {{ .Name | toPascalCase }} = struct\n    {{ .Content }}\n    end\n    \n    {{end}}\n    end\n    \n    {{ .Code }}\n\n# Library injection.\nlib:\n  regex: \"open Lib\"\n  include:\n    dsu: \"./src/lib/dsu.ml\"\n    mod: \"./src/lib/mod.ml\"\n    heap: \"./src/lib/heap.ml\"\n\n# Compilation.\ncompiler:\n  name: Ocaml\n  source: main.ml\n  compile: ocamlfind # empty if no compilation to be performed\n  args:\n    - ocamlopt\n    - -O2\n    - -o\n    - a.out\n    - main.ml\n    - -linkpkg\n    - -thread\n    - -package\n    - str,num,zarith,threads,containers,core,iter,batteries\n  run: ./a.out\n\n# Behaviour\ncreate_file: true\nrun_on_save: true\n",
+    "paths": [
+      "src/lib/dsu.ml",
+      "src/lib/heap.ml",
+      "src/lib/mod.ml",
+      "src/main.ml"
+    ],
+    "templateSource": "open Core\n\nlet sol n m = ()\n",
+    "template": "./src/main.ml",
+    "compiler": {
+      "name": "Ocaml",
+      "source": "main.ml",
+      "compile": "ocamlfind",
+      "args": [
+        "ocamlopt",
+        "-O2",
+        "-o",
+        "a.out",
+        "main.ml",
+        "-linkpkg",
+        "-thread",
+        "-package",
+        "str,num,zarith,threads,containers,core,iter,batteries"
+      ],
+      "run": "./a.out"
+    }
+  },
+  {
+    "id": "clj",
+    "revision": "71bc1ab07a3ebd2a5545f755152469bc8b6947df",
+    "config": "\nauthor: Ayush Biswas\n\neditor: \"code {{ .Filename }}\"\n\n# How to generate the destination filename.\nfilename:\n  rules:\n    - site: codeforces.com\n      regex: \"(?:problemset/problem|contest)/(\\\\d+)(?:/problem)?/([A-Za-z0-9]+)\"\n      template: \"./src/bin/cf_{{ index .Captures 1 }}_{{ index .Captures 2 }}.cljs\"\n\n    - site: atcoder.jp\n      regex: \"contests/([^/]+)/tasks/([^_]+)_([a-z]+)\"\n      template: \"./src/bin/ac_{{ index .Captures 2 }}_{{ index .Captures 3 | toLowerCase }}.cljs\"\n\n    - site: cses.fi\n      regex: \"problemset/task/(\\\\d+)/?$\"\n      template: \"./src/bin/cses_{{ index .Captures 1 }}_{{ .Title | toSnakeCase }}.cljs\"\n\n    - site: judge.u-aizu.ac.jp\n      regex: \"description\\\\.jsp\\\\?id=([A-Za-z0-9_]+)\"\n      template: \"./src/bin/aoj_{{ index .Captures 1 }}_{{ .Title | toSnakeCase }}.cljs\"\n\n    - site: open.kattis.com\n      regex: \"problems/([^/?]+)/?\"\n      template: \"./src/bin/{{ index .Captures 1 }}.cljs\"\n\n# Base source template.\ntemplate:\n  source: ./src/template.cljs\n  modifier: |\n    ;; Created by {{ .Author }} at {{ .Time }}\n    ;; {{ .Url }}\n    ;; {{ .Title }}\n    ;;\n    (ns bin.{{ .Filename | toKebabCase }}\n    {{ .Code | removeLines 1 }}\n\n# Optional code post-processing.\ncode:\n  modifier: |\n    (ns main.core \n        (:require \n            [\"fs\" :as fs]\n            [\"ac-library-js\" :as ac]\n            [\"data-structure-typed\" :as ds]\n            [clojure.string :as str]\n            [clojure.set :as set]\n    ))\n    {{.Header}}\n    {{ range .LibFiles }}\n    ;; lib {{ .Name }}\n    {{ .Content }}\n    ;; end {{ .Name }}\n    {{end}}\n    {{ .Code }}\n\n# Library injection.\nlib:\n  regex: \"(:require.*{{.Name}}.*)\"\n  include:\n    _: \"./src/lib/\"\n\n# Compilation.\ncompiler:\n  name: Clojurescript\n  source: main.cljs\n  run: bunx --bun nbb ./main.cljs\n\n# Behaviour\ncreate_file: true\nrun_on_save: true\n",
+    "paths": [
+      "src/lib/cpio.cljs",
+      "src/template.cljs"
+    ],
+    "templateSource": "(ns template \n  (:require [lib.cpio :refer [with-tokens]]))\n\n;; @code begin\n\n(defn solve [n xs]\n  (+ n (reduce + xs)))\n\n(with-tokens '[n :int\n               xs [:ints n]]\n  solve)\n\n;; @code end\n",
+    "template": "./src/template.cljs",
+    "compiler": {
+      "name": "Clojurescript",
+      "source": "main.cljs",
+      "run": "bunx --bun nbb ./main.cljs"
+    }
+  },
+  {
+    "id": "haskell",
+    "revision": "e2151d69e6cfa24b651c1fa75a3ff343f44d67c2",
+    "config": "\nauthor: Ayush Biswas\n\neditor: \"zed {{ .Filename }}\"\n\n# How to generate the destination filename.\nfilename:\n  rules:\n    - site: codeforces.com\n      regex: \"(?:problemset/problem|contest)/(\\\\d+)(?:/problem)?/([A-Za-z0-9]+)\"\n      template: './bin/{{ index .Captures 1 }}-{{ index .Captures 2 }}-{{ .Title | stripPrefix \".\"  | toKebabCase }}.hs'\n\n    - site: atcoder.jp\n      regex: \"contests/([^/]+)/tasks/([^_]+)_([a-z]+)\"\n      template: './bin/{{ index .Captures 2 }}-{{ index .Captures 3 | toLowerCase }}{{if gt (.Title | stripPrefix \"-\" | len) 0}}-{{ .Title | stripPrefix \"-\"  | toKebabCase }}{{- end -}}.hs'\n\n    - site: cses.fi\n      regex: \"problemset/task/(\\\\d+)/?$\"\n      template: \"./bin/cses-{{ index .Captures 1 }}-{{ .Title | toKebabCase }}.hs\"\n\n    - site: judge.u-aizu.ac.jp\n      regex: \"description\\\\.jsp\\\\?id=([A-Za-z0-9_]+)\"\n      template: \"./bin/aoj-{{ index .Captures 1 }}-{{ .Title | toKebabCase }}.hs\"\n\n    - site: open.kattis.com\n      regex: \"problems/([^/?]+)/?\"\n      template: \"./bin/{{ index .Captures 1 }}.hs\"\n\n# Base source template.\ntemplate:\n  source: ./Main.hs\n  modifier: |\n    -- Created by {{ .Author }} at {{ .Time }}\n    -- {{ .Url }}\n    -- {{ .Title }}\n    {{ .Code }}\n\n# Optional code post-processing.\ncode:\n  modifier: |\n    {{ range .LibFiles }}\n\n    {{ .Content }}\n\n    {{end}}\n\n    {{ .Code }}\n\n# Library injection.\nlib:\n  regex: \"import.*{{ .Name }}\"\n  include:\n\n# Compilation.\ncompiler:\n  name: Haskell\n  source: main.hs\n  compile: ghc # empty if no compilation to be performed\n  args:\n    - main.hs\n  run: ./main\n\n# Behaviour\ncreate_file: true\nrun_on_save: true\n",
+    "paths": [
+      "Main.hs"
+    ],
+    "templateSource": "-- @code begin\n\nmain :: IO ()\nmain = putStrLn \"Hello World\"\n\n-- @code end",
+    "template": "./Main.hs",
+    "compiler": {
+      "name": "Haskell",
+      "source": "main.hs",
+      "compile": "ghc",
+      "args": [
+        "main.hs"
+      ],
+      "run": "./main"
+    }
+  },
+  {
+    "id": "nim",
+    "revision": "22be606fddb3990ce2c2dd82b8c50b0486bdf5d8",
+    "config": "\nauthor: Ayush Biswas\n\neditor: \"code {{ .Filename }}\"\n\n# How to generate the destination filename.\nfilename:\n  rules:\n    - site: codeforces.com\n      regex: \"(?:problemset/problem|contest)/(\\\\d+)(?:/problem)?/([A-Za-z0-9]+)\"\n      template: './src/bin/{{ index .Captures 1 }}-{{ index .Captures 2 }}-{{ .Title | stripPrefix \".\"  | toKebabCase }}.nim'\n\n    - site: atcoder.jp\n      regex: \"contests/([^/]+)/tasks/([^_]+)_([a-z]+)\"\n      template: './src/bin/{{ index .Captures 2 }}-{{ index .Captures 3 | toLowerCase }}{{if gt (.Title | stripPrefix \"-\" | len) 0}}-{{ .Title | stripPrefix \"-\"  | toKebabCase }}{{- end -}}.nim'\n\n    - site: cses.fi\n      regex: \"problemset/task/(\\\\d+)/?$\"\n      template: \"./src/bin/cses-{{ index .Captures 1 }}-{{ .Title | toKebabCase }}.nim\"\n\n    - site: judge.u-aizu.ac.jp\n      regex: \"description\\\\.jsp\\\\?id=([A-Za-z0-9_]+)\"\n      template: \"./src/bin/aoj-{{ index .Captures 1 }}-{{ .Title | toKebabCase }}.nim\"\n\n    - site: open.kattis.com\n      regex: \"problems/([^/?]+)/?\"\n      template: \"./src/bin/{{ index .Captures 1 }}.nim\"\n\n# Base source template.\ntemplate:\n  source: ./src/main.nim\n  modifier: |\n    # Created by {{ .Author }} at {{ .Time }}\n    # {{ .Url }}\n    {{ .Code }}\n\n# Optional code post-processing.\ncode:\n  modifier: |\n    {{ range .LibFiles }}\n    ## lib {{ .Name }}\n    {{ .Content }}\n    ## end {{ .Name }}\n    {{end}}\n    {{ .Code }}\n\n# Library injection.\nlib:\n  regex: \"import.*{{.Name}}\"\n  include:\n    cpio: \"./src/lib/cpio.nim\"\n    itertools: \"./src/lib/itertools.nim\"\n\n# Compilation.\ncompiler:\n  name: Nim\n  source: main.nim\n  compile: nim # empty if no compilation to be performed\n  args:\n    - c\n    - -d:release\n    - main.nim\n  run: ./main\n\n# Behaviour\ncreate_file: true\nrun_on_save: true\n",
+    "paths": [
+      "src/lib/cpio.nim",
+      "src/lib/itertools.nim",
+      "src/main.nim"
+    ],
+    "templateSource": "import lib/cpio\n\n# @code begin\n\nvar r = newReader()\n\nlet\n  n = r[int]\n  a = r[seq[int]]\n\necho n\necho a\n\n# @code end\n",
+    "template": "./src/main.nim",
+    "compiler": {
+      "name": "Nim",
+      "source": "main.nim",
+      "compile": "nim",
+      "args": [
+        "c",
+        "-d:release",
+        "main.nim"
+      ],
+      "run": "./main"
+    }
+  },
+  {
+    "id": "gleam",
+    "revision": "9778023954f0c591faa3ef6d9fdfb5e3f79693b0",
+    "config": "\nauthor: Ayush Biswas\n\neditor: \"code {{ .Filename }}\"\n\n# How to generate the destination filename.\nfilename:\n  rules:\n    - site: codeforces.com\n      regex: \"(?:problemset/problem|contest)/(\\\\d+)(?:/problem)?/([A-Za-z0-9]+)\"\n      template: './src/bin/{{ index .Captures 1 }}_{{ index .Captures 2 | toLowerCase }}.gleam'\n\n    - site: atcoder.jp\n      regex: \"contests/([^/]+)/tasks/([^_]+)_([a-z]+)\"\n      template: './src/bin/{{ index .Captures 1 }}_{{ index .Captures 3 | toLowerCase }}.gleam'\n\n    - site: cses.fi\n      regex: \"problemset/task/(\\\\d+)/?$\"\n      template: './src/bin/cses_{{ index .Captures 1 }}_{{ .Title | toSnakeCase }}.rs'\n\n# Base source template.\ntemplate:\n  source: ./src/main.gleam\n  modifier: |\n    // Created by {{ .Author }} at {{ .Time }} \n    // {{ .Url }} \n    {{ .Code }}\n\n# Optional code post-processing.\ncode:\n  modifier: |\n    {{ .Header }}\n\n    {{ .Code }}\n    \n    {{ range .LibFiles }}\n    {{ .Content }}\n    {{end}}\n\n# Library injection.\nlib:\n  regex: \"import\\\\s*lib/{{.Name}}\"\n  include:\n    _: \"./src/lib/\"\n\n# Compilation.\ncompiler:\n  name: Gleam\n  source: main.gleam\n  compile: gbuild # empty if no compilation to be performed\n  args:\n  run: \"gleam run --no-print-progress -m main\"\n\n# Behaviour\ncreate_file: true\nrun_on_save: true\n",
+    "paths": [
+      "src/lib/cpio.gleam",
+      "src/lib/memo.gleam",
+      "src/main.gleam"
+    ],
+    "templateSource": "import lib/cpio.{type IOResult, Int, ParseInt, parse, to_string}\n\n// @code begin\nimport gleam/io\nimport gleam/yielder\nimport stdin\n\npub fn solve(lines: List(String)) -> IOResult {\n  let assert #(Int(n), _lines) = parse(lines, ParseInt)\n  let m = n * { n + 1 }\n  Int(m / 2)\n}\n\npub fn main() {\n  stdin.read_lines()\n  |> yielder.to_list\n  |> solve\n  |> to_string\n  |> io.println\n}\n// @code end\n",
+    "template": "./src/main.gleam",
+    "compiler": {
+      "name": "Gleam",
+      "source": "main.gleam",
+      "compile": "gbuild",
+      "args": null,
+      "run": "gleam run --no-print-progress -m main"
+    }
+  },
+  {
+    "id": "lean",
+    "revision": "7fc32202a5d602e3d249250efc8867a93523b4b8",
+    "config": "\nauthor: Ayush Biswas\n\neditor: \"code {{ .Filename }}\"\n\n# How to generate the destination filename.\nfilename:\n  rules:\n    - site: codeforces.com\n      regex: \"(?:problemset/problem|contest)/(\\\\d+)(?:/problem)?/([A-Za-z0-9]+)\"\n      template: './Src/Bin/{{ index .Captures 1 | toPascalCase }}_{{ index .Captures 2 | toPascalCase }}.lean'\n\n    - site: atcoder.jp\n      regex: \"contests/([^/]+)/tasks/([^_]+)_([a-z]+)\"\n      template: './Src/Bin/{{ index .Captures 2 | toPascalCase }}{{ index .Captures 3 | toPascalCase }}.lean'\n\n    - site: cses.fi\n      regex: \"problemset/task/(\\\\d+)/?$\"\n      template: './src/bin/cses_{{ index .Captures 1 | toPascalCase }}.lean'\n\n    - site: open.kattis.com\n      regex: \"problems/([^/?]+)/?\"\n      template: \"./src/bin/{{ index .Captures 1 | toPascalCase }}.lean\"\n\n# Base source template.\ntemplate:\n  source: ./Main.lean\n  modifier: |\n    -- Created by {{ .Author }} at {{ .Time }} \n    -- {{ .Url }} \n    {{ .Code }}\n\n# Optional code post-processing.\ncode:\n  modifier: |\n    {{ .Header }}\n    \n    {{ range .LibFiles }}\n    -- {{ .Name }} start --\n      {{ .Content }}\n    -- {{ .Name }} end --\n    {{end}}\n\n    {{ .Code }}\n\n# Library injection.\nlib:\n  regex: \"import\\\\s*Src.{{.Name}}\"\n  include:\n    _: \"./Src/\"\n\n# Compilation.\ncompiler:\n  name: Lean\n  source: Main.lean\n  compile: leanbuild # empty if no compilation to be performed\n  args:\n  run: ./main\n\n# Behaviour\ncreate_file: true\nrun_on_save: true\n",
+    "paths": [
+      "Main.lean",
+      "Src/Cpio.lean",
+      "Src/Dsu.lean"
+    ],
+    "templateSource": "import Src.Cpio\n\n-- @head begin\nimport Mathlib.Tactic\nimport Mathlib.Data.Int.Lemmas\nimport Mathlib.Data.List.Lemmas\nimport Mathlib.Data.String.Lemmas\n-- @head end\n\n-- @code begin\n\ndef fillOs (s : String) : \u2115 -> String\n  | 0     => s\n  | n + 1   => fillOs (\"o\" ++ s) n\n\ndef solution : \u2124 \u00d7 List (List String) -> String\n| (n, s) => match s with\n  | [[s]] => fillOs s (n - s.length).toNat\n  | _ => \"\"\n\ndef main : IO Unit :=\n  open CPio in\n  solve { withConfig with splitter := Splitter.NoSplitting } solution\n\n-- @code end\n",
+    "template": "./Main.lean",
+    "compiler": {
+      "name": "Lean",
+      "source": "Main.lean",
+      "compile": "leanbuild",
+      "args": null,
+      "run": "./main"
+    }
+  },
+  {
+    "id": "arm",
+    "revision": "9796de3373db9ac2fec3141d7c912978b6425bb5",
+    "config": "\nauthor: Ayush Biswas\n\neditor: \"code {{ .Filename }}\"\n\n# How to generate the destination filename.\nfilename:\n  rules:\n    - site: codeforces.com\n      regex: \"(?:problemset/problem|contest)/(\\\\d+)(?:/problem)?/([A-Za-z0-9]+)\"\n      template: './src/{{ index .Captures 1 }}-{{ index .Captures 2 }}-{{ .Title | stripPrefix \".\"  | toKebabCase }}.s'\n\n    - site: atcoder.jp\n      regex: \"contests/([^/]+)/tasks/([^_]+)_([a-z]+)\"\n      template: './src/{{ index .Captures 2 }}-{{ index .Captures 3 | toLowerCase }}{{if gt (.Title | stripPrefix \"-\" | len) 0}}-{{ .Title | stripPrefix \"-\"  | toKebabCase }}{{- end -}}.s'\n\n    - site: cses.fi\n      regex: \"problemset/task/(\\\\d+)/?$\"\n      template: './src/cses-{{ index .Captures 1 }}-{{ .Title | toKebabCase }}.s'\n\n    - site: judge.u-aizu.ac.jp\n      regex: \"description\\\\.jsp\\\\?id=([A-Za-z0-9_]+)\"\n      template: './src/aoj-{{ index .Captures 1 }}-{{ .Title | toKebabCase }}.s'\n\n    - site: open.kattis.com\n      regex: \"problems/([^/?]+)/?\"\n      template: \"./src/{{ index .Captures 1 }}.s\"\n\n# Base source template.\ntemplate:\n  source: ./main.s\n  modifier: |\n    // Created by {{ .Author }} at {{ .Time }} \n    // {{ .Url }} \n    {{ .Code }}\n\n# Optional code post-processing.\ncode:\n  modifier: |\n    {{ .Code }}\n\n# Library injection.\nlib:\n  regex: \"\"\n  include:\n    \n\n# Compilation.\ncompiler:\n  name: ARM64\n  source: main.s\n  compile: g++ # empty if no compilation to be performed\n  args:\n    - -o\n    - main\n    - main.s\n  run: ./main\n\n# Behaviour\ncreate_file: true\nrun_on_save: true\n",
+    "paths": [
+      "main.s"
+    ],
+    "templateSource": "        .global     _main\n\n        .text\nscan$t:         .asciz  \"%ld\"\n                .align  2\n\n_main:\n        mov     fp, sp\n        sub     sp, sp, #16 // can store upto two quads     \n\n        main.t  = -8\n\n        // Read t\n        adr     x0, scan$t\n        add     x1, fp, main.t\n        str     x1, [sp]\n        bl      _scanf\n\n        // load t in x19\n        ldr     x19, [fp, main.t]\n\nsolve_again:\n        bl      _solve\n        subs    x19, x19, 1\n        bne     solve_again\n\n        mov     x0, #0\n        bl      _exit\n\n_solve:\n        stp     fp, lr, [sp, #-16]!\n        mov     fp, sp\n        sub     sp, sp, #48\n\n        \n        add     sp, sp, #48\n        ldp     fp, lr, [sp], #16\n        ret",
+    "template": "./main.s",
+    "compiler": {
+      "name": "ARM64",
+      "source": "main.s",
+      "compile": "g++",
+      "args": [
+        "-o",
+        "main",
+        "main.s"
+      ],
+      "run": "./main"
+    }
+  },
+  {
+    "id": "llvm",
+    "revision": "403142cda85ccd034798124f253f6aa2f03ffb81",
+    "config": "\nauthor: Ayush Biswas\n\neditor: \"code {{ .Filename }}\"\n\n# How to generate the destination filename.\nfilename:\n  rules:\n    - site: codeforces.com\n      regex: \"(?:problemset/problem|contest)/(\\\\d+)(?:/problem)?/([A-Za-z0-9]+)\"\n      template: './src/{{ index .Captures 1 }}-{{ index .Captures 2 }}-{{ .Title | stripPrefix \".\"  | toKebabCase }}.ll'\n\n    - site: atcoder.jp\n      regex: \"contests/([^/]+)/tasks/([^_]+)_([a-z]+)\"\n      template: './src/{{ index .Captures 2 }}-{{ index .Captures 3 | toLowerCase }}{{if gt (.Title | stripPrefix \"-\" | len) 0}}-{{ .Title | stripPrefix \"-\"  | toKebabCase }}{{- end -}}.ll'\n\n    - site: cses.fi\n      regex: \"problemset/task/(\\\\d+)/?$\"\n      template: './src/cses-{{ index .Captures 1 }}-{{ .Title | toKebabCase }}.ll'\n\n    - site: judge.u-aizu.ac.jp\n      regex: \"description\\\\.jsp\\\\?id=([A-Za-z0-9_]+)\"\n      template: './src/aoj-{{ index .Captures 1 }}-{{ .Title | toKebabCase }}.ll'\n\n    - site: open.kattis.com\n      regex: \"problems/([^/?]+)/?\"\n      template: \"./src/{{ index .Captures 1 }}.ll\"\n\n# Base source template.\ntemplate:\n  source: ./main.ll\n  modifier: |\n    ; Created by {{ .Author }} at {{ .Time }} \n    ; {{ .Url }} \n    {{ .Code }}\n\n# Optional code post-processing.\ncode:\n  modifier: |\n    {{ .Header }}\n    \n    {{ range .LibFiles }}\n    {{ .Content }}\n    {{end}}\n\n    {{ .Code }}\n\n# Library injection.\nlib:\n  regex: \"; @include {{ .Name }}\"\n  include:\n    _: \"./lib/\"\n\n# Compilation.\ncompiler:\n  name: LLVM IR\n  source: main.ll\n  compile: clang # empty if no compilation to be performed\n  args:\n    - main.ll\n    - -o\n    - main\n  run: ./main\n\n# Behaviour\ncreate_file: true\nrun_on_save: true\n",
+    "paths": [
+      "lib/dsu.ll",
+      "lib/fast_io.ll",
+      "lib/graph.ll",
+      "lib/itertools.ll",
+      "lib/vector.ll",
+      "main.ll"
+    ],
+    "templateSource": "; @include fast_io\n\n; @head begin\ndeclare i32 @printf(ptr, ...)\n; @head end\n\n; @code begin\n\n; format strings for printing\n@fmt-out = constant [4 x i8] c\"%s\\0A\\00\"\n\ndefine void @sol() {\n    ; read n and k\n    %n = call i64 @read_i64()\n    %k = call i64 @read_i64()\n    \n    %s = alloca [100 x i8]\n    call i64 @read_string(ptr %s)\n\n    %idx = sub i64 %k, 1 ; get the index\n\n    %char.ptr = getelementptr [100 x i8], ptr %s, i64 0, i64 %idx\n\n    %char = load i8, ptr %char.ptr\n    %char.lower = add i8 %char, 32 ; convert to lowercase\n    store i8 %char.lower, ptr %char.ptr\n\n    call i32 (ptr, ...) @printf(ptr @fmt-out, ptr %s)\n\n    ret void\n}\n\ndefine i32 @main() {\n    call void @sol()\n\n    ret i32 0\n}\n; @code end",
+    "template": "./main.ll",
+    "compiler": {
+      "name": "LLVM IR",
+      "source": "main.ll",
+      "compile": "clang",
+      "args": [
+        "main.ll",
+        "-o",
+        "main"
+      ],
+      "run": "./main"
+    }
+  }
+]

@@ -5,3 +5,6 @@
 *.test
 /dist/
 __pycache__/
+website/dist/
+website/node_modules/
+website/.wrangler/

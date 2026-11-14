@@ -1,0 +1,13 @@
+schema: spec-driven
+
+context: |
+  Follow the repository-root AGENTS.md for contributor instructions and project context.
+  The user restricts new Markdown files to AGENTS.md. Do not generate proposal,
+  design, tasks, specs, tool skills, or other Markdown files unless the user
+  explicitly changes that restriction. Use exploration without artifact generation
+  and record project understanding in AGENTS.md.
+  Authorized exception: the user requested the agreed website plan be captured
+  for implementation in changes/add-eitri-onboarding-website/. Its proposal,
+  design, tasks, and capability specs may be created and maintained. This does
+  not authorize unrelated Markdown files. The user subsequently authorized
+  Cloudflare publication at eitri.veryshyjelly.in only.

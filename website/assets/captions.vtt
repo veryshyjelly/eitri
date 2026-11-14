@@ -1,0 +1,16 @@
+WEBVTT
+
+00:00.000 --> 00:03.000
+EDITOR + EITRI — The recording starts with an existing, customized workspace.
+
+00:03.000 --> 00:08.000
+BROWSER — Open the problem and use Competitive Companion to send its samples to Eitri.
+
+00:08.000 --> 00:21.500
+EDITOR + EITRI — The local solution is open on the right; sample input and answers appear in the terminal on the left. Edit and save.
+
+00:21.500 --> 00:25.000
+EITRI — Review the local sample verdict. AC means the samples passed.
+
+00:25.000 --> 00:30.470
+BROWSER / EDITOR — Compare the problem’s samples with the local results. Press c in Eitri to copy a prepared solution for manual submission.

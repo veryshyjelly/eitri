@@ -1,0 +1,14 @@
+{
+  "name": "eitri-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs && node serve.mjs",
+    "test": "node build.mjs && node --test tests/*.test.mjs && node tests/fixtures.mjs",
+    "deploy": "node build.mjs && npx --yes wrangler@4.162.0 deploy --config wrangler.jsonc"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

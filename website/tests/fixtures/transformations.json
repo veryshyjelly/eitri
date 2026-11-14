@@ -1,0 +1,29 @@
+[
+  {
+    "id": "cpp",
+    "name": "C++: local includes become one source file",
+    "libraryName": "dsu",
+    "library": "// @head begin\n#include <iostream>\n// @head end\n// @code begin\nint twice(int x) { return x * 2; }\n// @code end",
+    "source": "#include <dsu.hpp>\n// @code begin\nint main() { std::cout << twice(4); }\n// @code end",
+    "expected": "#include <iostream>\nint twice(int x) { return x * 2; }\nint main() { std::cout << twice(4); }",
+    "explanation": "The local include selects dsu. Its head block becomes .Header, its code block becomes a library body, and the solution\u2019s code block becomes .Code. The local include stays outside the generated source."
+  },
+  {
+    "id": "rust",
+    "name": "Rust: a local module becomes an inline module",
+    "libraryName": "math",
+    "library": "pub fn twice(x: i32) -> i32 { x * 2 }",
+    "source": "mod math;\nuse math::twice;\n// @code begin\nfn main() { println!(\"{}\", math::twice(4)); }\n// @code end",
+    "expected": "fn main() { println!(\"{}\", math::twice(4)); }\nmod math {\npub fn twice(x: i32) -> i32 { x * 2 }\n}",
+    "explanation": "The local module declaration and use statement stay outside @code. The use statement selects the math snippet; the modifier puts its contents inside an inline mod math in the prepared source."
+  },
+  {
+    "id": "llvm",
+    "name": "LLVM IR: a comment becomes a dependency declaration",
+    "libraryName": "fast_io",
+    "library": "; @head begin\ndeclare i32 @puts(ptr)\n; @head end\n; @code begin\n@message = private constant [3 x i8] c\"OK\\00\"\n; @code end",
+    "source": "; @include fast_io\n; @code begin\ndefine i32 @main() {\n  %result = call i32 @puts(ptr @message)\n  ret i32 0\n}\n; @code end",
+    "expected": "declare i32 @puts(ptr)\n@message = private constant [3 x i8] c\"OK\\00\"\ndefine i32 @main() {\n%result = call i32 @puts(ptr @message)\nret i32 0\n}",
+    "explanation": "The comment matches lib.regex, while declarations and executable IR travel through separate head/code blocks. Eitri does not need to understand LLVM syntax."
+  }
+]
