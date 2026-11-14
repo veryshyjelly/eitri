@@ -16,7 +16,7 @@ class PackageManagersTest(unittest.TestCase):
         self.dist.mkdir()
         self.output = self.root / "packages"
         self.checksums = {}
-        for artifact in ("source.tar.gz", "windows_amd64.zip", "windows_arm64.zip"):
+        for artifact in ("windows_amd64.zip", "windows_arm64.zip"):
             name = "eitri_1.2.3_" + artifact
             data = ("fixture:" + artifact).encode()
             (self.dist / name).write_bytes(data)
@@ -30,11 +30,6 @@ class PackageManagersTest(unittest.TestCase):
 
     def test_packages_match_version_architecture_and_verified_hashes(self):
         generate("v1.2.3", self.dist, self.output)
-        formula = (self.output / "Formula" / "eitri.rb").read_text()
-        self.assertIn("/v1.2.3/eitri_1.2.3_source.tar.gz", formula)
-        self.assertIn(self.checksums["eitri_1.2.3_source.tar.gz"], formula)
-        self.assertIn('depends_on "go" => :build', formula)
-        self.assertIn("main.version=#{version}", formula)
         scoop = json.loads((self.output / "bucket" / "eitri.json").read_text())
         self.assertEqual(scoop["version"], "1.2.3")
         self.assertEqual(scoop["bin"], "eitri.exe")
@@ -63,7 +58,7 @@ class PackageManagersTest(unittest.TestCase):
         self.assertFalse(self.output.exists())
 
     def test_missing_artifact_is_rejected(self):
-        (self.dist / "eitri_1.2.3_source.tar.gz").unlink()
+        (self.dist / "eitri_1.2.3_windows_arm64.zip").unlink()
         with self.assertRaises(FileNotFoundError):
             generate("v1.2.3", self.dist, self.output)
         self.assertFalse(self.output.exists())

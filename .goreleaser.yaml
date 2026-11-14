@@ -1,15 +1,16 @@
 version: 2
 project_name: eitri
 
-# Homebrew builds from the checksummed source archive, with Go managed by brew.
-# Scoop needs Windows packages for both supported processor architectures.
+# Publish native binaries for Homebrew and Windows packages for Scoop.
 builds:
-  - id: windows
+  - id: eitri
     main: .
     binary: eitri
     env:
       - CGO_ENABLED=0
     goos:
+      - darwin
+      - linux
       - windows
     goarch:
       - amd64
@@ -20,11 +21,14 @@ builds:
       - -s -w -X main.version={{ .Version }}
 
 archives:
-  - id: windows
+  - id: eitri
     ids:
-      - windows
+      - eitri
     formats:
-      - zip
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - LICENSE

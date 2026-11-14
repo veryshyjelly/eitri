@@ -28,9 +28,10 @@ Use a compiler, an interpreter, or a project build command. Keep source transfor
 ### macOS and Linux · Homebrew
 
 ```sh
-brew tap veryshyjelly/eitri https://github.com/veryshyjelly/eitri.git
-brew install veryshyjelly/eitri/eitri
+brew install veryshyjelly/tap/eitri
 ```
+
+The formula is maintained in [veryshyjelly/homebrew-tap](https://github.com/veryshyjelly/homebrew-tap). If you used the previous tap, run `brew uninstall veryshyjelly/eitri/eitri` and `brew untap veryshyjelly/eitri` before installing from the new tap.
 
 ### Windows · Scoop
 

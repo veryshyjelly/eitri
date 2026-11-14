@@ -12,7 +12,7 @@ on:
 permissions:
   contents: write
 
-# A single publisher updates both package definitions on main.
+# Scoop stays in this repository; Homebrew updates itself in veryshyjelly/homebrew-tap.
 concurrency:
   group: package-release
   cancel-in-progress: false
@@ -50,20 +50,19 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Generate verified package definitions
+      - name: Generate verified Scoop definition
         run: python scripts/package_managers.py --tag "$RELEASE_TAG"
-      - name: Update Homebrew tap and Scoop bucket
+      - name: Update Scoop bucket
         run: |
           git fetch origin main
           git switch -C package-update origin/main
-          mkdir -p Formula bucket
-          cp dist/package-managers/Formula/eitri.rb Formula/eitri.rb
+          mkdir -p bucket
           cp dist/package-managers/bucket/eitri.json bucket/eitri.json
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add Formula/eitri.rb bucket/eitri.json
+          git add bucket/eitri.json
           if ! git diff --cached --quiet; then
-            git commit -m "Update Homebrew and Scoop packages to $RELEASE_TAG"
+            git commit -m "Update Scoop package to $RELEASE_TAG"
             git pull --rebase origin main
             git push origin HEAD:main
           fi

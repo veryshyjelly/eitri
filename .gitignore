@@ -8,3 +8,4 @@ __pycache__/
 website/dist/
 website/node_modules/
 website/.wrangler/
+/.serena/

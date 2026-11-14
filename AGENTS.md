@@ -16,7 +16,7 @@
 - Call Serena's `initial_instructions` before code work and use its returned session ID. The project is `eitri`; its language server is Go.
 - Start with `lsp.get_symbols_overview`, then narrow with `lsp.find_symbol`. Read bodies when needed and use `lsp.find_referencing_symbols` to trace callers before changing contracts.
 - Prefer reference-aware rename and symbol edits where appropriate; use ordinary file edits for small changes and configuration.
-- Do not write onboarding memories while the Markdown restriction is active. `.serena/project.yml` contains project configuration; local overrides and cache are ignored by `.serena/.gitignore`.
+- Do not write onboarding memories while the Markdown restriction is active. The entire `.serena/` directory is local and ignored by Git; do not track its configuration or caches.
 
 ### Context7: current documentation
 
@@ -176,3 +176,10 @@ The local onboarding website is in `website/`. It uses a dependency-free Node ge
 - Deploy with `npm --prefix website run deploy` after the website checks. The script builds before invoking pinned Wrangler 4.162.0; credentials stay in Wrangler’s user-level login store, never in the repository.
 - The generator emits canonical/absolute social URLs, robots.txt, sitemap.xml and a custom 404 page. dist/.assetsignore excludes the starter test-fixture JSON from uploads. Keep internal research fixtures out of generated assets.
 - Verify HTTPS, all five routes, media/font assets, trailing-slash redirects, custom 404 behavior and absence of test fixtures after publishing. The hosting source of truth is Cloudflare, not Sites hosting.
+
+## Release packaging
+
+- Homebrew formulas and their updater live in the separate public `veryshyjelly/homebrew-tap` repository. Do not add Formula/ or Homebrew templates/generation back into this application repository.
+- Install with `brew install veryshyjelly/tap/eitri`. The tap checks the latest stable GitHub release hourly (or via manual workflow dispatch), verifies release archive checksums, and commits its own formula using its repository-scoped GITHUB_TOKEN. No cross-repository write credential is required.
+- The existing v1.1.0 release has source and Windows archives only, so the initial migrated formula still builds from source. Future releases built by the updated GoReleaser config include macOS/Linux amd64/arm64 tarballs; the tap then installs those binaries without a Go build dependency. Do not claim current v1.1.0 has prebuilt Unix packages.
+- `scripts/package_managers.py` and its tests now generate only Scoop's Windows definition. `.github/workflows/release.yml` publishes release assets and updates only bucket/eitri.json in this repository.

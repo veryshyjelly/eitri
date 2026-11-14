@@ -1,11 +1,10 @@
-"""Generate Homebrew and Scoop definitions from verified GoReleaser artifacts."""
+"""Generate the Scoop definition from verified GoReleaser artifacts."""
 
 import argparse
 import hashlib
 import json
 from pathlib import Path
 import re
-from string import Template
 
 
 def validate_tag(tag):
@@ -37,7 +36,6 @@ def generate(tag, dist, output):
             raise ValueError("checksum mismatch for " + filename)
         return expected
 
-    source_hash = verified_hash("eitri_{}_source.tar.gz".format(version))
     architecture = {}
     for scoop_arch, go_arch in (("64bit", "amd64"), ("arm64", "arm64")):
         filename = "eitri_{}_windows_{}.zip".format(version, go_arch)
@@ -53,12 +51,8 @@ def generate(tag, dist, output):
         "architecture": architecture,
         "bin": "eitri.exe",
     }
-    template = Path(__file__).resolve().parent.parent / "packaging" / "eitri.rb.tmpl"
-    formula = Template(template.read_text()).substitute(version=version, sha256=source_hash)
-    # Validate every input before writing either package definition.
-    (output / "Formula").mkdir(parents=True, exist_ok=True)
+    # Validate every artifact before writing the package definition.
     (output / "bucket").mkdir(parents=True, exist_ok=True)
-    (output / "Formula" / "eitri.rb").write_text(formula)
     (output / "bucket" / "eitri.json").write_text(json.dumps(scoop, indent=2) + "\n")
 
 
